@@ -1,9 +1,8 @@
-nimbones
---------
+Low Energy Reconstruction of Source Information
+-----------------------------------------------
 
-A skeleton project tree used internally for starting new nim modules quickly. This comes with an infrastructure already set up for performing pre-installation hooks, testing, and benchmarking in *nix environments.
-
-TODO
- - Support other operating systems than *nix.
- - Replace or augment the template directory with a setup script.
-
+This project is a machine vision module intended for use in low power environments
+and places an emphasis on computational efficiency and accuracy. LERoSI favors
+a hexagonal sampling lattice in pursuit of the above objectives, and seeks to
+provide efficient resampling, homography, and information retrieval techniques
+in an easy to use and understand interface.

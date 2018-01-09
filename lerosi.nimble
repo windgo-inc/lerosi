@@ -8,6 +8,8 @@ license       = "MIT"
 # Dependencies
 
 requires "nim >= 0.17.2"
+requires "arraymancer >= 0.2.90"
+requires "arraymancer_vision >= 0.0.3"
 
 skipDirs = @["test", "bootstrap"]
 
