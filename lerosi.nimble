@@ -9,6 +9,8 @@ license       = "MIT"
 
 requires "nim >= 0.17.2"
 requires "arraymancer >= 0.2.90"
+requires "imghdr >= 1.0"
+requires "nimpng >= 0.2.0"
 
 skipDirs = @["test", "bootstrap"]
 
