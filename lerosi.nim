@@ -1,4 +1,4 @@
-import macros, os, system, sequtils, strutils, math, algorithm
+import macros, os, system, sequtils, strutils, math, algorithm, future
 import imghdr, nimPNG, arraymancer
 
 
@@ -7,13 +7,18 @@ import imghdr, nimPNG, arraymancer
 
 
 
-template toType*[U](d: openarray[U], T: typedesc): untyped =
-  when T == U:
-    block:
-      d
-  else:
-    block:
-      map(d, proc (x: U): T = T(x))
+type
+  ChannelForm = enum
+    ## Floating point channel encoding forms
+    NormalizedPositiveForm, NormalizedUnitForm
+
+const
+  TypeDefaultForm = NormalizedPositiveForm ## The default floating point encoding form
+
+
+
+type
+  ImageData*[T] = openarray[T]|Tensor[T]
 
 
 type ImageType* = imghdr.ImageType ## Image format enumeration.
@@ -28,15 +33,84 @@ type
   ujImage = pointer
 
 
-# μJPEG library bindings.
-proc ujCreate() : ujImage {.cdecl, importc: "ujCreate".}
-proc ujDecode(img: ujImage, data: ptr cuchar, size: int) : ujImage {.cdecl, importc: "ujDecode".}
-proc ujDecodeFile(img: ujImage, filename: cstring) : ujImage {.cdecl, importc: "ujDecodeFile".}
-proc ujGetWidth(img: ujImage) : int {.cdecl, importc: "ujGetWidth".}
-proc ujGetHeight(img: ujImage) : int {.cdecl, importc: "ujGetHeight".}
-proc ujGetImageSize(img: ujImage) : int {.cdecl, importc: "ujGetImageSize".}
-proc ujGetImage(img: ujImage, dest: cstring) : cstring {.cdecl, importc: "ujGetImage".}
-proc ujDestroy(img: ujImage) {.cdecl, importc: "ujDestroy".}
+
+template toType*[U](d: openarray[U], T: typedesc): untyped =
+  ## Convert from one array type to another. In the case that the target type
+  ## is the same as the current array type
+  when T is U and U is T:
+    block:
+      d
+  else:
+    block:
+      map(d, proc (x: U): T = T(x))
+
+
+
+proc normalPosToI[E: SomeReal, I: SomeInteger](x: E): I {.inline, noSideEffect.} =
+  I(x * E(high(I)))
+
+
+proc normalUnitToI[E: SomeReal, I: SomeInteger](x: E): I {.inline, noSideEffect.} =
+  let c = E(high(I)) / 2.E
+  result = I((x + 1.E) * c)
+
+
+proc normalIntToPos[I: SomeInteger, E: SomeReal](x: I): E {.inline, noSideEffect.} =
+  x.E / E(high(I))
+
+
+proc normalIntToUnit[I: SomeInteger, E: SomeReal](x: I): E {.inline, noSideEffect.} =
+  let c = E(high(I)) / 2.E
+  result = (x.E / c) - 1.E
+
+
+
+template lerosiRenormalized*[U: SomeNumber](d: U, T: typedesc, form: ChannelForm = TypeDefaultForm, form2: ChannelForm = TypeDefaultForm): untyped =
+  ## Renormalize according to normal channel encoding forms, source, and destination types.
+  when U is SomeReal and T is SomeInteger:
+    case form:
+      of NormalizedPositiveForm:
+        normalPosToI[U, T](d)
+      of NormalizedUnitForm:
+        normalUnitToI[U, T](d)
+  else:
+    when U is SomeInteger and T is SomeReal:
+      case form:
+        of NormalizedPositiveForm:
+          normalIntToPos[U, T](d)
+        of NormalizedUnitForm:
+          normalIntToUnit[U, T](d)
+    else:
+      when U is SomeInteger and T is SomeInteger:
+        normalUnitToI[float, T](normalIntToUnit[U, float](d))
+      else:
+        when U is SomeReal and T is SomeReal:
+          when form == form2:
+            d
+          else:
+            case (form, form2):
+              of (NormalizedPositiveForm, NormalizedUnitForm):
+                T(d.float * 2.float - 1.float)
+              of (NormalizedUnitForm, NormalizedPositiveForm):
+                T(d.float * 0.5.float + 0.5.float)
+              else:
+                d.T
+        else:
+          d.T
+
+
+template lerosiMap*[D: ImageData](img: D, body: untyped): untyped =
+  when D is Tensor:
+    d.map_inline:
+      body
+  else:
+    d.map do (x: U) -> T:
+      body
+
+
+template lerosiRenormalized*[D: ImageData](img: D, T: typedesc, form: ChannelForm = TypeDefaultForm, form2: ChannelForm = TypeDefaultForm): untyped =
+  img.lerosiMap:
+    renormalized(x, form, form2)
 
 
 const
@@ -103,6 +177,18 @@ template interpret_array(data: string, T: typedesc): untyped =
 template interpret_array[T](data: openarray[T], U: typedesc): untyped =
   ## Reinterpret an array safely.
   data.interpret_string().interpret_array(U)
+
+
+# μJPEG library bindings.
+proc ujCreate() : ujImage {.cdecl, importc: "ujCreate".}
+proc ujDecode(img: ujImage, data: ptr cuchar, size: int) : ujImage {.cdecl, importc: "ujDecode".}
+proc ujDecodeFile(img: ujImage, filename: cstring) : ujImage {.cdecl, importc: "ujDecodeFile".}
+proc ujGetWidth(img: ujImage) : int {.cdecl, importc: "ujGetWidth".}
+proc ujGetHeight(img: ujImage) : int {.cdecl, importc: "ujGetHeight".}
+proc ujGetImageSize(img: ujImage) : int {.cdecl, importc: "ujGetImageSize".}
+proc ujGetImage(img: ujImage, dest: cstring) : cstring {.cdecl, importc: "ujGetImage".}
+proc ujDestroy(img: ujImage) {.cdecl, importc: "ujDestroy".}
+
 
 
 proc imageio_check_format(filename: string): ImageType =
