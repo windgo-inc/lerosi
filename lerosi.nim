@@ -2,7 +2,12 @@ import macros, os, system, sequtils, strutils, math, algorithm
 import imghdr, nimPNG, arraymancer
 
 template toType*[U](d: openarray[U], T: typedesc): untyped =
-  map(d, proc (x: U): T = T(x))
+  when T == U:
+    block:
+      d
+  else:
+    block:
+      map(d, proc (x: U): T = T(x))
 
 
 type ImageType* = imghdr.ImageType ## Image format enumeration.
@@ -17,11 +22,11 @@ const
   IIO_RGB24* = 0x1
   IIO_RGBA32* = 0x2
 
-  IIO_DEFAULT_FORMAT* = 0x1
+  IIO_DEFAULT_FORMAT* = IIO_RGBA32
 
   IIO_ENCODE_PNG = 0x100 
 
-  IIO_DEFAULT_ENCODING* = IIO_ENCODE_PNG|IIO_ENCODE_
+  IIO_DEFAULT_ENCODING* = IIO_ENCODE_PNG
 
 
 proc interpret_string[T](data: openarray[T]): string {.noSideEffect.} =
@@ -138,14 +143,14 @@ proc imageio_save_uint8_png[T](filename: string, data: openarray[uint8], w, h: i
 proc imageio_save_png*[T; U: SomeNumber](filename: string, data: openarray[U], w, h: int, options: set[T] = {IIO_DEFAULT_FORMAT}) {.inline, noSideEffect.} =
   imageio_save_uint8_png(filename, data.toType(uint8), w, h, options)
 
-proc imageio_load*[T; U: string|openarray](resource: U, w, h: var int, options: set[T] = {IIO_DEFAULT_FORMAT, IIO_DEFAULT_ENCODING}): seq[uint8] =
+proc imageio_load*[T; U: string|openarray](resource: U, w, h: var int, options: set[T] = {IIO_DEFAULT_FORMAT}): seq[uint8] =
   ## Load an image from a file or memory
   
   # Detect image type.
   let itype = resource.imageio_check_format(resource)
 
   # Select loader.
-  if itype == imghdr.PNG:
+  if itype == PNG:
     result = resource.imageio_load_png(w, h, options)
   else:
     w = 0
@@ -153,7 +158,7 @@ proc imageio_load*[T; U: string|openarray](resource: U, w, h: var int, options: 
     result.setLen(0)
     raise newException(IIOError, "IIO: Unsupported image data format: " & $itype)
 
-proc imageio_save*[T; U: SomeNumber](filename: string, data: openarray[U], w, h: int, options: set[T] = {IIO_DEFAULT_ENCODING}) =
+#proc imageio_save*[T; U: SomeNumber](filename: string, data: openarray[U], w, h: int, options: set[T] = {IIO_DEFAULT_ENCODING}) =
 
 
 #proc imageio_save_png*[T; U: SomeNumber](filename: string, data: openarray[U], w, h: int, options: set[T] = {IIO_DEFAULT_FORMAT}) {.inline, noSideEffect.} =
