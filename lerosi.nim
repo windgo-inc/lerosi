@@ -1,6 +1,12 @@
 import macros, os, system, sequtils, strutils, math, algorithm
 import imghdr, nimPNG, arraymancer
 
+
+# Incorporate ujpeg.c
+{.compile: "ujpeg.c".}
+
+
+
 template toType*[U](d: openarray[U], T: typedesc): untyped =
   when T == U:
     block:
@@ -16,6 +22,21 @@ type ImageType* = imghdr.ImageType ## Image format enumeration.
 type
   IIOError* = object of Exception
 
+
+# μJPEG image type is a generic pointer
+type
+  ujImage = pointer
+
+
+# μJPEG library bindings.
+proc ujCreate() : ujImage {.cdecl, importc: "ujCreate".}
+proc ujDecode(img: ujImage, data: ptr cuchar, size: int) : ujImage {.cdecl, importc: "ujDecode".}
+proc ujDecodeFile(img: ujImage, filename: cstring) : ujImage {.cdecl, importc: "ujDecodeFile".}
+proc ujGetWidth(img: ujImage) : int {.cdecl, importc: "ujGetWidth".}
+proc ujGetHeight(img: ujImage) : int {.cdecl, importc: "ujGetHeight".}
+proc ujGetImageSize(img: ujImage) : int {.cdecl, importc: "ujGetImageSize".}
+proc ujGetImage(img: ujImage, dest: cstring) : cstring {.cdecl, importc: "ujGetImage".}
+proc ujDestroy(img: ujImage) {.cdecl, importc: "ujDestroy".}
 
 
 const
