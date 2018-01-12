@@ -1,9 +1,9 @@
 import macros, os, system, sequtils, strutils, math, algorithm, future
 import imghdr, nimPNG, arraymancer
 
+import stb_image/read as stbi
+import stb_image/write as stbiw
 
-# Incorporate ujpeg.c
-{.compile: "ujpeg.c".}
 
 
 
@@ -26,11 +26,6 @@ type ImageType* = imghdr.ImageType ## Image format enumeration.
 
 type
   IIOError* = object of Exception
-
-
-# μJPEG image type is a generic pointer
-type
-  ujImage = pointer
 
 
 
@@ -65,7 +60,7 @@ proc normalIntToUnit[I: SomeInteger, E: SomeReal](x: I): E {.inline, noSideEffec
 
 
 
-template lerosiRenormalized*[U: SomeNumber](d: U, T: typedesc, form: ChannelForm = TypeDefaultForm, form2: ChannelForm = TypeDefaultForm): untyped =
+template lerosiRenormalized*[U: SomeNumber](d: U, T: typedesc, form: static[ChannelForm] = TypeDefaultForm, form2: static[ChannelForm] = TypeDefaultForm): untyped =
   ## Renormalize according to normal channel encoding forms, source, and destination types.
   when U is SomeReal and T is SomeInteger:
     case form:
@@ -114,18 +109,24 @@ template lerosiRenormalized*[D: ImageData](img: D, T: typedesc, form: ChannelFor
 
 
 const
-  IIO_RGB24* = 0x1
-  IIO_RGBA32* = 0x2
+  IIO_STOR_UINT8 = 0x1
+  IIO_STOR_FLOAT_UNIT = 0x2
+  IIO_STOR_FLOAT_POSITIVE = 0x4
 
-  IIO_DEFAULT_FORMAT* = IIO_RGBA32
+  IIO_CH_ZA   = 0x0008
+  IIO_CH_AZ   = 0x0010
+  IIO_CH_ZX   = 0x0020
+  IIO_CH_XZ   = 0x0040
 
-  IIO_ENCODE_PNG = 0x100 
+  IIO_ORD_V    = 0x0100
+  IIO_ORD_RGB* = 0x0200
+  IIO_ORD_BGR* = 0x0400
 
-  IIO_DEFAULT_ENCODING* = IIO_ENCODE_PNG
+  IIO_DEFAULT_FORMAT* = {IIO_STOR_UINT8, IIO_ORD_RGB, IIO_CH_ZA}
 
 
 proc interpret_string[T](data: openarray[T]): string {.noSideEffect.} =
-  ## Convert a an array of raw data to a string.
+  ## Convert a an array of raw data to a string by reinterpretation.
   when sizeof(T) > 1:
     # TODO Untested
     result = newStringOfCap(len(data) * sizeof(T))
@@ -143,7 +144,7 @@ template interpret_string(data: string): string = data
 
 
 template interpret_array(data: string, T: typedesc): untyped =
-  ## Convert a string in to an array of integers.
+  ## Convert a string in to an array of integers by reinterpretation.
   when sizeof(T) > 1:
     # TODO Untested
     block:
@@ -179,17 +180,6 @@ template interpret_array[T](data: openarray[T], U: typedesc): untyped =
   data.interpret_string().interpret_array(U)
 
 
-# μJPEG library bindings.
-proc ujCreate() : ujImage {.cdecl, importc: "ujCreate".}
-proc ujDecode(img: ujImage, data: ptr cuchar, size: int) : ujImage {.cdecl, importc: "ujDecode".}
-proc ujDecodeFile(img: ujImage, filename: cstring) : ujImage {.cdecl, importc: "ujDecodeFile".}
-proc ujGetWidth(img: ujImage) : int {.cdecl, importc: "ujGetWidth".}
-proc ujGetHeight(img: ujImage) : int {.cdecl, importc: "ujGetHeight".}
-proc ujGetImageSize(img: ujImage) : int {.cdecl, importc: "ujGetImageSize".}
-proc ujGetImage(img: ujImage, dest: cstring) : cstring {.cdecl, importc: "ujGetImage".}
-proc ujDestroy(img: ujImage) {.cdecl, importc: "ujDestroy".}
-
-
 
 proc imageio_check_format(filename: string): ImageType =
   ## Check the image format stored within a file.
@@ -201,64 +191,33 @@ proc imageio_check_format*[T](data: openarray[T]): ImageType =
   testImage(data[0..31].toType(int8))
 
 
-# TODO Use macros to collapse the two versions of load_png
+proc hwc2chw*[T](img: Tensor[T]): Tensor[T] =
+  ## Convert image from HxWxC convetion to the CxHxW convention,
+  ## where C,W,H stands for channels, width, height, note that this library
+  ## only works with CxHxW images for optimization and internal usage reasons
+  ## using CxHxW for images is also a common approach in deep learning
+  img.permute(2, 0, 1)
 
-proc imageio_load_png*[T](filename: string, w, h: var int, options: set[T] = {IIO_DEFAULT_FORMAT}): seq[uint8] =
-  ## Load a PNG image from a file.
-  var r: PNGResult
-  if options.contains(IIO_RGBA32):
-    r = loadPNG32(filename)
-  elif options.contains(IIO_RGB24):
-    r = loadPNG24(filename)
-  else:
-    raise newException(IIOError, "IIO-PNG: Unrecognized decoder (in-file) output format requested.")
-
-  result = r.data.interpret_array(uint8)
-  w = r.width
-  h = r.height
+proc chw2hwc*[T](img: Tensor[T]): Tensor[T] =
+  ## Convert image from CxHxW convetion to the HxWxC convention,
+  ## where C,W,H stands for channels, width, height, note that this library
+  ## only works with CxHxW images for optimization and internal usage reasons
+  ## using CxHxW for images is also a common approach in deep learning
+  img.permute(1, 2, 0)
 
 
-proc imageio_load_png*[T; U: SomeInteger](data: openarray[U], w, h: var int, options: set[T] = {IIO_DEFAULT_FORMAT}): seq[uint8] =
-  ## Load a PNG image from core.
-  var r: PNGResult
-  if options.contains(IIO_RGBA32):
-    r = decodePNG32(data.interpret_string())
-  elif options.contains(IIO_RGB24):
-    r = decodePNG24(data.interpret_string())
-  else:
-    raise newException(IIOError, "IIO-PNG: Unrecognized decoder (in-core) output format requested.")
 
-  result = r.data.interpret_array(uint8)
-  w = r.width
-  h = r.height
-
-
-proc imageio_save_string_png[T](filename, data: string, w, h: int, options: set[T] = {IIO_DEFAULT_FORMAT}) =
-  ## Save a png to a file
-  if options.contains(IIO_RGBA32):
-    discard savePNG32(filename, data, w, h)
-  elif options.contains(IIO_RGB24):
-    discard savePNG24(filename, data, w, h)
-  else:
-    raise newException(IIOError, "IIO-PNG: Unrecognized encoder (in-core) output format requested.")
-
-# TODO Remove intermediate buffers
-proc imageio_save_uint8_png[T](filename: string, data: openarray[uint8], w, h: int, options: set[T] = {IIO_DEFAULT_FORMAT}) {.inline, noSideEffect.} =
-  ## Save a png to a file
-  imageio_save_string_png(filename, data.interpret_string(), w, h, options)
-
-proc imageio_save_png*[T; U: SomeNumber](filename: string, data: openarray[U], w, h: int, options: set[T] = {IIO_DEFAULT_FORMAT}) {.inline, noSideEffect.} =
-  imageio_save_uint8_png(filename, data.toType(uint8), w, h, options)
-
-proc imageio_load*[T; U: string|openarray](resource: U, w, h: var int, options: set[T] = {IIO_DEFAULT_FORMAT}): seq[uint8] =
+proc imageio_load*[T; U: string|openarray](resource: U, w, h, ch: var int, options: set[T] = IIO_DEFAULT_FORMAT): seq[uint8] =
   ## Load an image from a file or memory
   
   # Detect image type.
   let itype = resource.imageio_check_format(resource)
 
   # Select loader.
-  if itype == PNG:
-    result = resource.imageio_load_png(w, h, options)
+  if itype in {BMP, PNG, JPEG, TGA, HDR}:
+    try:
+      let pixels = stbi.load(resource, w, h, ch, 4)
+      result = pixels.toTensor().reshape([h, w, ch]).hwc2chw().asContiguous()
   else:
     w = 0
     h = 0
