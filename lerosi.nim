@@ -162,62 +162,6 @@ proc get_stbi_format_by_channels(actual_channels: int): set[int8] =
     else: IIO_DEFAULT_FORMAT
 
 
-proc interpret_string[T](data: openarray[T]): string {.noSideEffect.} =
-  ## Convert a an array of raw data to a string by reinterpretation.
-  when sizeof(T) > 1:
-    # TODO Untested
-    result = newStringOfCap(len(data) * sizeof(T))
-    for dat in data:
-      var bytes = cast[ptr char](addr(dat))
-      for i in 0..<sizeof(T):
-        result.add(bytes[i])
-  else:
-    result = newStringOfCap(len(data))
-    for ch in data:
-      result.add(ch.char)
-
-
-template interpret_string(data: string): string = data
-
-
-template interpret_array(data: string, T: typedesc): untyped =
-  ## Convert a string in to an array of integers by reinterpretation.
-  when sizeof(T) > 1:
-    # TODO Untested
-    block:
-      var
-        sq = @[]
-        acc: array[sizeof(T), char]
-        ctr = 0
-
-      for ch in data:
-        acc[ctr] = ch
-        inc ctr
-        if ctr == sizeof(T):
-          ctr = 0
-          sq.add(cast[ptr T](acc))
-    
-      if ctr < sizeof(T):
-        for i in ctr..<sizeof(T):
-          acc[i] = 0
-
-        sq.add(cast[ptr T](acc)[])
-
-      sq
-  else:
-    block:
-      var sq: seq[T] = @[]
-      for ch in data:
-        sq.add(T(ch))
-
-      sq
-
-template interpret_array[T](data: openarray[T], U: typedesc): untyped =
-  ## Reinterpret an array safely.
-  data.interpret_string().interpret_array(U)
-
-
-
 proc imageio_check_format(filename: string): ImageType =
   ## Check the image format stored within a file.
   testImage(filename)
