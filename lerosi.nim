@@ -1,4 +1,4 @@
-import macros, os, system, sequtils, strutils, math, algorithm, future
+import macros, streams, os, system, sequtils, strutils, math, algorithm, future
 import imghdr, arraymancer
 
 import stb_image/read as stbi
@@ -59,25 +59,25 @@ type
     channels: seq[ImageChannel]
 
 
-  ImageChannelBound = enum
-    Unbounded
-    BoundLow,
-    BoundHi,
+  ImageChannelBoundKind = enum
+    Unbounded,
+    BoundLower,
     BoundTotal
+
+  ImageChannelBound[T] = ref object
+    case kind: ImageChannelBoundKind
+    of BoundLower:
+      bound: T
+    of BoundTotal:
+      lbound: T
+      ubound: T
+    of Unbounded:
+      discard
 
   ImageProperties[T] = object
     layout: ImageChannelLayout
-    isHdr: bool
-    case bound: ImageChannelBound
-    of BoundLow:
-      lo: T
-    of BoundHi:
-      hi: T
-    of BoundTotal:
-      lo: T
-      hi: T
-    else:
-      discard
+    bound: ImageChannelBound[T]
+    scale: T
     
 
 
@@ -85,20 +85,9 @@ template count[L: ImageChannelLayout](layout: L): untyped = layout.channels.len
 
 
 
-const
-  TypeDefaultForm = NormalizedPositiveForm ## The default floating point encoding form
-
-
-
 type
   ImageData*[T] = openarray[T]|Tensor[T]
 
-
-#type
-#  ImageType* {.pure.} = imghdr.ImageType ## Image format enumeration.
-
-
-type
   IIOError* = object of Exception
 
 
@@ -132,54 +121,6 @@ proc normalIntToUnit[I: SomeInteger, E: SomeReal](x: I): E {.inline, noSideEffec
   let c = E(high(I)) / E(2.0)
   result = (x.E / c) - E(1.0)
 
-
-
-template lerosiRenormalized*[U: SomeNumber](d: U, T: typedesc, form: static[ChannelForm] = TypeDefaultForm, form2: static[ChannelForm] = TypeDefaultForm): untyped =
-  ## Renormalize according to normal channel encoding forms, source, and destination types.
-  when U is SomeReal and T is SomeInteger:
-    case form:
-      of NormalizedPositiveForm:
-        normalPosToI[U, T](d)
-      of NormalizedUnitForm:
-        normalUnitToI[U, T](d)
-  else:
-    when U is SomeInteger and T is SomeReal:
-      case form:
-        of NormalizedPositiveForm:
-          normalIntToPos[U, T](d)
-        of NormalizedUnitForm:
-          normalIntToUnit[U, T](d)
-    else:
-      when U is SomeInteger and T is SomeInteger:
-        normalUnitToI[float, T](normalIntToUnit[U, float](d))
-      else:
-        when U is SomeReal and T is SomeReal:
-          when form == form2:
-            d
-          else:
-            case (form, form2):
-              of (NormalizedPositiveForm, NormalizedUnitForm):
-                T(d.float * 2.float - 1.float)
-              of (NormalizedUnitForm, NormalizedPositiveForm):
-                T(d.float * 0.5.float + 0.5.float)
-              else:
-                d.T
-        else:
-          d.T
-
-
-template lerosiMap*[D: ImageData](img: D, body: untyped): untyped =
-  when D is Tensor:
-    img.map_inline:
-      body
-  else:
-    img.map do (x: U) -> T:
-      body
-
-
-template lerosiRenormalized*[D: ImageData](img: D, T: typedesc, form: ChannelForm = TypeDefaultForm, form2: ChannelForm = TypeDefaultForm): untyped =
-  img.lerosiMap:
-    lerosiRenormalized(x, T, form, form2)
 
 
 proc get_desired_channels(options: set[int8]): int =
@@ -247,7 +188,7 @@ proc pixels*[T](img: Tensor[T]): seq[uint8] =
   img.chw2hwc().asType(uint8).asContiguous().data
 
 
-proc imageio_load*[U: string|openarray](resource: U): Tensor[uint8] =
+proc imageio_load_core*[U: string|openarray](resource: U): Tensor[uint8] =
   ## Load an image from a file or memory
   
   try:
@@ -256,7 +197,7 @@ proc imageio_load*[U: string|openarray](resource: U): Tensor[uint8] =
 
     # Select loader.
     if itype == imghdr.ImageType.HDR:
-      raise newException(IIOError, "LERoSI-IIO: HDR format image may not be loaded from " & $itype & " file.")
+      raise newException(IIOError, "LERoSI-IIO: HDR format must be loaded through the image_load_hdr interface.")
     elif itype in {imghdr.ImageType.BMP, imghdr.ImageType.PNG, imghdr.ImageType.JPEG}:
       let desired_ch = 0
       var w, h, ch: int
@@ -297,8 +238,24 @@ proc stbi_loadf_from_memory(
 ): ptr cfloat
   {.importc: "stbi_loadf_from_memory".}
 
+proc stbi_write_hdr(
+  filename: cstring;
+  x, y, channels: cint;
+  data: ptr cfloat
+): cint
+  {.importc: "stbi_write_hdr".}
 
-proc imageio_load_hdr*[U: string|openarray](resource: U): Tensor[float32] =
+proc stbi_write_hdr_to_func(
+  fn: writeCallback;
+  context: pointer;
+  x, y, channels: cint;
+  data: ptr cfloat
+): cint
+  {.importc: "stbi_write_hdr_to_func".}
+
+
+
+proc imageio_load_hdr_core*[U: string|openarray](resource: U): Tensor[float32] =
   try:
     # Detect image type.
     let itype = resource.imageio_check_format()
@@ -337,112 +294,125 @@ proc imageio_load_hdr*[U: string|openarray](resource: U): Tensor[float32] =
 
 
 
-proc imageio_save*[T](img: Tensor[T], filename: string, saveOpt: SaveOptions = SaveOptions(format: BMP)): bool =
+template write_img_impl[T](img: Tensor[T], filename: string, iface: untyped): untyped =
+  iface(filename, img.width, img.height, img.channels, img.pixels)
+
+template write_img_impl[T](img: Tensor[T], filename: string, iface, opt: untyped): untyped =
+  iface(filename, img.width, img.height, img.channels, img.pixels, opt)
+
+template write_img_impl[T](img: Tensor[T], iface: untyped): untyped =
+  iface(img.width, img.height, img.channels, img.pixels)
+
+template write_img_impl[T](img: Tensor[T], iface, opt: untyped): untyped =
+  iface(img.width, img.height, img.channels, img.pixels, opt)
+
+template write_hdr_impl[T](img: Tensor[T], filename: string): untyped =
+  block:
+    let cimg = when img is Tensor[cfloat]: img else: img.asType(cfloat)
+    let data = cimg.chw2hwc().asContiguous().data
+    let res = stbi_write_hdr(filename.cstring, cimg.width.cint, cimg.height.cint, cimg.channels.cint, data[0].unsafeAddr) == 1
+
+    res
+
+
+proc sequence_write(context, data: pointer, size: cint) {.cdecl.} =
+  if size > 0:
+    let wbuf = cast[ptr seq[byte]](context)
+    let wbufl = wbuf[].len
+
+    wbuf[].setLen(wbufl + size)
+    copyMem(wbuf[][wbufl].addr, data, size)
+
+
+template write_hdr_impl[T](img: Tensor[T]): untyped =
+  block:
+    let cimg = when img is Tensor[cfloat]: img else: img.asType(cfloat)
+    let data = cimg.chw2hwc().asContiguous().data
+
+    var buf: seq[byte]
+    let res = stbi_write_hdr_to_func(sequence_write, buf.addr, cimg.width.cint, cimg.height.cint, cimg.channels.cint, data[0].unsafeAddr) == 1
+
+    res
+
+
+proc imageio_save_core[T](img: Tensor[T], filename: string, saveOpt: SaveOptions = SaveOptions(nil)): bool =
   let theOpt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
 
-  var oimg: Tensor[T]
-  if theOpt.isHdr and not (theOpt.format == HDR):
-    oimg = img.map_inline:
-      x * 255.T
-  else:
-    oimg = img
-
-  result = case theOpt.format:
+  case theOpt.format:
     of BMP:
-      stbiw.writeBMP(filename, oimg.width, oimg.height, oimg.channels, oimg.pixels)
+      result = img.write_img_impl(filename, stbiw.writeBMP)
     of PNG:
-      stbiw.writePNG(filename, oimg.width, oimg.height, oimg.channels, oimg.pixels, theOpt.stride)
+      result = img.write_img_impl(filename, stbiw.writePNG, theOpt.stride)
     of JPEG:
-      stbiw.writeJPG(filename, oimg.width, oimg.height, oimg.channels, oimg.pixels, theOpt.quality)
+      result = img.write_img_impl(filename, stbiw.writeJPG, theOpt.quality)
     of HDR:
-      when oimg is Tensor[float32]:
-        stbiw.writeHDR(filename, oimg.width, oimg.height, oimg.channels, oimg.chw2hwc().asContiguous().data)
-      else:
-        false
-    of LDR2HDR:
-      var dat: Tensor[float32] = oimg.asType(float32)
-
-      dat.apply_inline:
-        theOpt.lo + x / (theOpt.hi - theOpt.lo)
-      
-      stbiw.writeHDR(filename, dat.width, dat.height, dat.channels, dat.chw2hwc().asContiguous().data)
+      result = img.write_hdr_impl(filename)
     else:
-      stbiw.writeBMP(filename, oimg.width, oimg.height, oimg.channels, oimg.pixels)
+      raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $theOpt.format & ".")
 
 
-proc imageio_save*[T](img: Tensor[T], saveOpt: SaveOptions = SaveOptions(format: BMP)): bool =
+proc imageio_save_core*[T](img: Tensor[T], saveOpt: SaveOptions = SaveOptions(nil)): bool =
   let theOpt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
 
-  var oimg: Tensor[T]
-  if theOpt.isHdr and not (theOpt.format == HDR):
-    oimg = img.map_inline:
-      x * 255.T
-  else:
-    oimg = img
-
-  result = case theOpt.format:
+  case theOpt.format:
     of BMP:
-      stbiw.writeBMP(oimg.width, oimg.height, oimg.channels, oimg.pixels)
+      result = img.write_img_impl(stbiw.writeBMP)
     of PNG:
-      stbiw.writePNG(oimg.width, oimg.height, oimg.channels, oimg.pixels, theOpt.stride)
+      result = img.write_img_impl(stbiw.writePNG, theOpt.stride)
     of JPEG:
-      stbiw.writeJPG(oimg.width, oimg.height, oimg.channels, oimg.pixels, theOpt.quality)
+      result = img.write_img_impl(stbiw.writeJPG, theOpt.quality)
     of HDR:
-      when oimg is Tensor[float32]:
-        stbiw.writeHDR(oimg.width, oimg.height, oimg.channels, oimg.chw2hwc().asContiguous().data)
-      else:
-        false
-    of LDR2HDR:
-      var dat: Tensor[float32] = oimg.asType(float32)
-
-      dat.apply_inline:
-        theOpt.lo + x / (theOpt.hi - theOpt.lo)
-      
-      stbiw.writeHDR(dat.width, dat.height, dat.channels, dat.chw2hwc().asContiguous().data)
+      result = img.write_hdr_impl()
     else:
-      stbiw.writeBMP(oimg.width, oimg.height, oimg.channels, oimg.pixels)
+      raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $theOpt.format & ".")
 
 
 when isMainModule:
   import typetraits
 
-  let mypic = "test/sample.png".imageio_load()
+  let mypic = "test/sample.png".imageio_load_core()
   echo "PNG Loaded Shape: ", mypic.shape
 
-  echo "Write BMP from PNG: ", mypic.imageio_save("test/samplepng-out.bmp", SaveOptions(format: BMP))
-  echo "Write PNG from PNG: ", mypic.imageio_save("test/samplepng-out.png", SaveOptions(format: PNG, stride: 0))
-  echo "Write JPEG from PNG: ", mypic.imageio_save("test/samplepng-out.jpeg", SaveOptions(format: JPEG, quality: 100))
-  echo "Write HDR from PNG: ", mypic.imageio_save("test/samplepng-out.hdr", SaveOptions(format: LDR2HDR, lo: 0.float32, hi: 255.float32))
+  echo "Write BMP from PNG: ", mypic.imageio_save_core("test/samplepng-out.bmp", SaveOptions(format: BMP))
+  echo "Write PNG from PNG: ", mypic.imageio_save_core("test/samplepng-out.png", SaveOptions(format: PNG, stride: 0))
+  echo "Write JPEG from PNG: ", mypic.imageio_save_core("test/samplepng-out.jpeg", SaveOptions(format: JPEG, quality: 100))
+  echo "Write HDR from PNG: ", imageio_save_core(mypic.asType(cfloat) / 255.0, "test/samplepng-out.hdr", SaveOptions(format: HDR))
 
-  let mypic2 = "test/samplepng-out.bmp".imageio_load()
+  let mypic2 = "test/samplepng-out.bmp".imageio_load_core()
   echo "BMP Loaded Shape: ", mypic2.shape
 
-  echo "Write BMP from BMP: ", mypic2.imageio_save("test/samplebmp-out.bmp", SaveOptions(format: BMP))
-  echo "Write PNG from BMP: ", mypic2.imageio_save("test/samplebmp-out.png", SaveOptions(format: PNG, stride: 0))
-  echo "Write JPEG from BMP: ", mypic2.imageio_save("test/samplebmp-out.jpeg", SaveOptions(format: JPEG, quality: 100))
-  echo "Write HDR from BMP: ", mypic2.imageio_save("test/samplebmp-out.hdr", SaveOptions(format: LDR2HDR, lo: 0.float32, hi: 255.float32))
+  echo "Write BMP from BMP: ", mypic2.imageio_save_core("test/samplebmp-out.bmp", SaveOptions(format: BMP))
+  echo "Write PNG from BMP: ", mypic2.imageio_save_core("test/samplebmp-out.png", SaveOptions(format: PNG, stride: 0))
+  echo "Write JPEG from BMP: ", mypic2.imageio_save_core("test/samplebmp-out.jpeg", SaveOptions(format: JPEG, quality: 100))
+  echo "Write HDR from BMP: ", imageio_save_core(mypic2.asType(cfloat) / 255.0, "test/samplebmp-out.hdr", SaveOptions(format: HDR))
 
-  let mypicjpeg = "test/samplepng-out.jpeg".imageio_load()
+  let mypicjpeg = "test/samplepng-out.jpeg".imageio_load_core()
   echo "JPEG Loaded Shape: ", mypicjpeg.shape
 
-  echo "Write BMP from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.bmp", SaveOptions(format: BMP))
-  echo "Write PNG from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.png", SaveOptions(format: PNG, stride: 0))
-  echo "Write JPEG from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.jpeg", SaveOptions(format: JPEG, quality: 100))
-  echo "Write HDR from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.hdr", SaveOptions(format: LDR2HDR, lo: 0.float32, hi: 255.float32))
+  echo "Write BMP from JPEG: ", mypicjpeg.imageio_save_core("test/samplejpeg-out.bmp", SaveOptions(format: BMP))
+  echo "Write PNG from JPEG: ", mypicjpeg.imageio_save_core("test/samplejpeg-out.png", SaveOptions(format: PNG, stride: 0))
+  echo "Write JPEG from JPEG: ", mypicjpeg.imageio_save_core("test/samplejpeg-out.jpeg", SaveOptions(format: JPEG, quality: 100))
+  echo "Write HDR from JPEG: ", imageio_save_core(mypicjpeg.asType(cfloat) / 255.0, "test/samplejpeg-out.hdr", SaveOptions(format: HDR))
 
-  var mypichdr = "test/samplepng-out.hdr".imageio_load_hdr()
+  var mypichdr = "test/samplepng-out.hdr".imageio_load_hdr_core()
   echo "HDR Loaded Shape: ", mypichdr.shape
 
-  #mypichdr *= 255.0
+  echo "Write HDR from HDR: ", mypichdr.imageio_save_core("test/samplehdr-out.hdr", SaveOptions(format: HDR))
 
-  echo "Write BMP from HDR: ", mypichdr.imageio_save("test/samplehdr-out.bmp", SaveOptions(format: BMP, isHdr: true))
-  echo "Write PNG from HDR: ", mypichdr.imageio_save("test/samplehdr-out.png", SaveOptions(format: PNG, stride: 0, isHdr: true))
-  echo "Write JPEG from HDR: ", mypichdr.imageio_save("test/samplehdr-out.jpeg", SaveOptions(format: JPEG, quality: 100, isHdr: true))
-  echo "Write HDR from HDR: ", mypichdr.imageio_save("test/samplehdr-out.hdr", SaveOptions(format: HDR, isHdr: true))
+  echo "Scale for the rest of the formats"
+  mypichdr *= 255.0
 
-  let myhdrpic = "test/samplehdr-out.hdr".imageio_load_hdr()
+  echo "Write BMP from HDR: ", mypichdr.imageio_save_core("test/samplehdr-out.bmp", SaveOptions(format: BMP))
+  echo "Write PNG from HDR: ", mypichdr.imageio_save_core("test/samplehdr-out.png", SaveOptions(format: PNG, stride: 0))
+  echo "Write JPEG from HDR: ", mypichdr.imageio_save_core("test/samplehdr-out.jpeg", SaveOptions(format: JPEG, quality: 100))
+
+  var myhdrpic = "test/samplehdr-out.hdr".imageio_load_hdr_core()
   echo "HDR Loaded Shape: ", myhdrpic.shape
-  echo "Write BMP from second HDR: ", myhdrpic.imageio_save("test/samplehdr2-out.bmp", SaveOptions(format: BMP))
+
+  myhdrpic *= 255.0
+  echo "Scale for the rest of the bitmap test"
+
+  echo "Write BMP from second HDR: ", myhdrpic.imageio_save_core("test/samplehdr2-out.bmp", SaveOptions(format: BMP))
 
 
 #proc imageio_save*[T; U: SomeNumber](filename: string, data: openarray[U], w, h: int, options: set[T] = {IIO_DEFAULT_ENCODING}) =
