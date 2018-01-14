@@ -25,18 +25,10 @@ const
 
 
 type
-  ChannelForm = enum
-    ## Floating point channel encoding forms
-    NormalizedPositiveForm, NormalizedUnitForm
-
-
-type
   ImageFormat = enum
     PNG, BMP, JPEG, LDR2HDR, HDR
   SaveOptions = ref object
-    inputForm: ChannelForm
-    isHdr: bool
-    case kind: ImageFormat
+    case format: ImageFormat
     of PNG:
       stride: int
     of JPEG:
@@ -46,6 +38,52 @@ type
       hi: float32
     else:
       discard
+
+  ImageChannel = enum
+    C_LUMINANCE, C_INTENSITY,
+    C_RED, C_GREEN, C_BLUE,
+    C_CYAN, C_MAGENTA, C_YELLOW
+
+    C_LUMA, C_Chm_U, C_Chm_V, C_Chm_Cb, C_Chm_Cr
+
+    C_DEAD0, C_DEAD1,
+    C_ALPHA,
+
+    C_AUX00, C_AUX01, C_AUX02, C_AUX03,
+    C_AUX04, C_AUX05, C_AUX06, C_AUX07,
+    C_AUX08, C_AUX09, C_AUX10, C_AUX11,
+    C_AUX12, C_AUX13, C_AUX14, C_AUX15
+
+
+  ImageChannelLayout = object
+    channels: seq[ImageChannel]
+
+
+  ImageChannelBound = enum
+    Unbounded
+    BoundLow,
+    BoundHi,
+    BoundTotal
+
+  ImageProperties[T] = object
+    layout: ImageChannelLayout
+    isHdr: bool
+    case bound: ImageChannelBound
+    of BoundLow:
+      lo: T
+    of BoundHi:
+      hi: T
+    of BoundTotal:
+      lo: T
+      hi: T
+    else:
+      discard
+    
+
+
+template count[L: ImageChannelLayout](layout: L): untyped = layout.channels.len
+
+
 
 const
   TypeDefaultForm = NormalizedPositiveForm ## The default floating point encoding form
@@ -299,17 +337,17 @@ proc imageio_load_hdr*[U: string|openarray](resource: U): Tensor[float32] =
 
 
 
-proc imageio_save*[T](img: Tensor[T], filename: string, saveOpt: SaveOptions = SaveOptions(kind: BMP)): bool =
-  let theOpt = if saveOpt == nil: SaveOptions(kind: BMP) else: saveOpt
+proc imageio_save*[T](img: Tensor[T], filename: string, saveOpt: SaveOptions = SaveOptions(format: BMP)): bool =
+  let theOpt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
 
   var oimg: Tensor[T]
-  if theOpt.isHdr and not (theOpt.kind == HDR):
+  if theOpt.isHdr and not (theOpt.format == HDR):
     oimg = img.map_inline:
       x * 255.T
   else:
     oimg = img
 
-  result = case theOpt.kind:
+  result = case theOpt.format:
     of BMP:
       stbiw.writeBMP(filename, oimg.width, oimg.height, oimg.channels, oimg.pixels)
     of PNG:
@@ -332,17 +370,17 @@ proc imageio_save*[T](img: Tensor[T], filename: string, saveOpt: SaveOptions = S
       stbiw.writeBMP(filename, oimg.width, oimg.height, oimg.channels, oimg.pixels)
 
 
-proc imageio_save*[T](img: Tensor[T], saveOpt: SaveOptions = SaveOptions(kind: BMP)): bool =
-  let theOpt = if saveOpt == nil: SaveOptions(kind: BMP) else: saveOpt
+proc imageio_save*[T](img: Tensor[T], saveOpt: SaveOptions = SaveOptions(format: BMP)): bool =
+  let theOpt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
 
   var oimg: Tensor[T]
-  if theOpt.isHdr and not (theOpt.kind == HDR):
+  if theOpt.isHdr and not (theOpt.format == HDR):
     oimg = img.map_inline:
       x * 255.T
   else:
     oimg = img
 
-  result = case theOpt.kind:
+  result = case theOpt.format:
     of BMP:
       stbiw.writeBMP(oimg.width, oimg.height, oimg.channels, oimg.pixels)
     of PNG:
@@ -371,40 +409,40 @@ when isMainModule:
   let mypic = "test/sample.png".imageio_load()
   echo "PNG Loaded Shape: ", mypic.shape
 
-  echo "Write BMP from PNG: ", mypic.imageio_save("test/samplepng-out.bmp", SaveOptions(kind: BMP))
-  echo "Write PNG from PNG: ", mypic.imageio_save("test/samplepng-out.png", SaveOptions(kind: PNG, stride: 0))
-  echo "Write JPEG from PNG: ", mypic.imageio_save("test/samplepng-out.jpeg", SaveOptions(kind: JPEG, quality: 100))
-  echo "Write HDR from PNG: ", mypic.imageio_save("test/samplepng-out.hdr", SaveOptions(kind: LDR2HDR, lo: 0.float32, hi: 255.float32))
+  echo "Write BMP from PNG: ", mypic.imageio_save("test/samplepng-out.bmp", SaveOptions(format: BMP))
+  echo "Write PNG from PNG: ", mypic.imageio_save("test/samplepng-out.png", SaveOptions(format: PNG, stride: 0))
+  echo "Write JPEG from PNG: ", mypic.imageio_save("test/samplepng-out.jpeg", SaveOptions(format: JPEG, quality: 100))
+  echo "Write HDR from PNG: ", mypic.imageio_save("test/samplepng-out.hdr", SaveOptions(format: LDR2HDR, lo: 0.float32, hi: 255.float32))
 
   let mypic2 = "test/samplepng-out.bmp".imageio_load()
   echo "BMP Loaded Shape: ", mypic2.shape
 
-  echo "Write BMP from BMP: ", mypic2.imageio_save("test/samplebmp-out.bmp", SaveOptions(kind: BMP))
-  echo "Write PNG from BMP: ", mypic2.imageio_save("test/samplebmp-out.png", SaveOptions(kind: PNG, stride: 0))
-  echo "Write JPEG from BMP: ", mypic2.imageio_save("test/samplebmp-out.jpeg", SaveOptions(kind: JPEG, quality: 100))
-  echo "Write HDR from BMP: ", mypic2.imageio_save("test/samplebmp-out.hdr", SaveOptions(kind: LDR2HDR, lo: 0.float32, hi: 255.float32))
+  echo "Write BMP from BMP: ", mypic2.imageio_save("test/samplebmp-out.bmp", SaveOptions(format: BMP))
+  echo "Write PNG from BMP: ", mypic2.imageio_save("test/samplebmp-out.png", SaveOptions(format: PNG, stride: 0))
+  echo "Write JPEG from BMP: ", mypic2.imageio_save("test/samplebmp-out.jpeg", SaveOptions(format: JPEG, quality: 100))
+  echo "Write HDR from BMP: ", mypic2.imageio_save("test/samplebmp-out.hdr", SaveOptions(format: LDR2HDR, lo: 0.float32, hi: 255.float32))
 
   let mypicjpeg = "test/samplepng-out.jpeg".imageio_load()
   echo "JPEG Loaded Shape: ", mypicjpeg.shape
 
-  echo "Write BMP from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.bmp", SaveOptions(kind: BMP))
-  echo "Write PNG from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.png", SaveOptions(kind: PNG, stride: 0))
-  echo "Write JPEG from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.jpeg", SaveOptions(kind: JPEG, quality: 100))
-  echo "Write HDR from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.hdr", SaveOptions(kind: LDR2HDR, lo: 0.float32, hi: 255.float32))
+  echo "Write BMP from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.bmp", SaveOptions(format: BMP))
+  echo "Write PNG from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.png", SaveOptions(format: PNG, stride: 0))
+  echo "Write JPEG from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.jpeg", SaveOptions(format: JPEG, quality: 100))
+  echo "Write HDR from JPEG: ", mypicjpeg.imageio_save("test/samplejpeg-out.hdr", SaveOptions(format: LDR2HDR, lo: 0.float32, hi: 255.float32))
 
   var mypichdr = "test/samplepng-out.hdr".imageio_load_hdr()
   echo "HDR Loaded Shape: ", mypichdr.shape
 
   #mypichdr *= 255.0
 
-  echo "Write BMP from HDR: ", mypichdr.imageio_save("test/samplehdr-out.bmp", SaveOptions(kind: BMP, isHdr: true))
-  echo "Write PNG from HDR: ", mypichdr.imageio_save("test/samplehdr-out.png", SaveOptions(kind: PNG, stride: 0, isHdr: true))
-  echo "Write JPEG from HDR: ", mypichdr.imageio_save("test/samplehdr-out.jpeg", SaveOptions(kind: JPEG, quality: 100, isHdr: true))
-  echo "Write HDR from HDR: ", mypichdr.imageio_save("test/samplehdr-out.hdr", SaveOptions(kind: HDR, isHdr: true))
+  echo "Write BMP from HDR: ", mypichdr.imageio_save("test/samplehdr-out.bmp", SaveOptions(format: BMP, isHdr: true))
+  echo "Write PNG from HDR: ", mypichdr.imageio_save("test/samplehdr-out.png", SaveOptions(format: PNG, stride: 0, isHdr: true))
+  echo "Write JPEG from HDR: ", mypichdr.imageio_save("test/samplehdr-out.jpeg", SaveOptions(format: JPEG, quality: 100, isHdr: true))
+  echo "Write HDR from HDR: ", mypichdr.imageio_save("test/samplehdr-out.hdr", SaveOptions(format: HDR, isHdr: true))
 
   let myhdrpic = "test/samplehdr-out.hdr".imageio_load_hdr()
   echo "HDR Loaded Shape: ", myhdrpic.shape
-  echo "Write BMP from second HDR: ", myhdrpic.imageio_save("test/samplehdr2-out.bmp", SaveOptions(kind: BMP))
+  echo "Write BMP from second HDR: ", myhdrpic.imageio_save("test/samplehdr2-out.bmp", SaveOptions(format: BMP))
 
 
 #proc imageio_save*[T; U: SomeNumber](filename: string, data: openarray[U], w, h: int, options: set[T] = {IIO_DEFAULT_ENCODING}) =
