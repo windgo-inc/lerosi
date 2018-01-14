@@ -6,24 +6,6 @@ import stb_image/write as stbiw
 
 
 
-const
-  IIO_STOR_UINT8* = 1.int8
-  IIO_STOR_FLOAT_UNIT* = 2.int8
-  IIO_STOR_FLOAT_POSITIVE* = 3.int8
-
-  IIO_CH_ZA*  = 4.int8
-  IIO_CH_AZ*  = 5.int8
-  IIO_CH_ZX*  = 6.int8
-  IIO_CH_XZ*  = 7.int8
-
-  IIO_ORD_V*   = 8.int8
-  IIO_ORD_RGB* = 9.int8
-  IIO_ORD_BGR* = 10.int8
-
-  IIO_DEFAULT_FORMAT* = {IIO_STOR_UINT8, IIO_ORD_RGB, IIO_CH_ZA}
-
-
-
 type
   ImageFormat = enum
     PNG, BMP, JPEG, LDR2HDR, HDR
@@ -95,50 +77,8 @@ type
 template toType*[U](d: openarray[U], T: typedesc): untyped =
   ## Convert from one array type to another. In the case that the target type
   ## is the same as the current array type
-  when T is U and U is T:
-    block:
-      d
-  else:
-    block:
-      map(d, proc (x: U): T = T(x))
+  when T is U and U is T: d else: map(d, proc (x: U): T = T(x))
 
-
-
-proc normalPosToI[E: SomeReal, I: SomeInteger](x: E): I {.inline, noSideEffect.} =
-  I(x * E(high(I)))
-
-
-proc normalUnitToI[E: SomeReal, I: SomeInteger](x: E): I {.inline, noSideEffect.} =
-  let c = E(high(I)) / E(2.0)
-  result = I((x + 1.E) * c)
-
-
-proc normalIntToPos[I: SomeInteger, E: SomeReal](x: I): E {.inline, noSideEffect.} =
-  x.E / E(high(I))
-
-
-proc normalIntToUnit[I: SomeInteger, E: SomeReal](x: I): E {.inline, noSideEffect.} =
-  let c = E(high(I)) / E(2.0)
-  result = (x.E / c) - E(1.0)
-
-
-
-proc get_desired_channels(options: set[int8]): int =
-  let alpha_add = if IIO_CH_ZA in options or IIO_CH_AZ in options: 1 else: 0
-  if IIO_ORD_V in options:
-    result = alpha_add + 1
-  elif IIO_ORD_RGB in options or IIO_ORD_BGR in options:
-    result = alpha_add + 3
-  else:
-    result = 0
-
-proc get_stbi_format_by_channels(actual_channels: int): set[int8] =
-  result = case actual_channels:
-    of 1: {IIO_ORD_V, IIO_STOR_UINT8}
-    of 2: {IIO_ORD_V, IIO_CH_ZA, IIO_STOR_UINT8}
-    of 3: {IIO_ORD_RGB, IIO_STOR_UINT8}
-    of 4: {IIO_ORD_RGB, IIO_CH_ZA, IIO_STOR_UINT8}
-    else: IIO_DEFAULT_FORMAT
 
 
 proc imageio_check_format(filename: string): ImageType =
