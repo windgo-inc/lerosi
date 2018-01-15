@@ -171,12 +171,14 @@ template imageio_load_core(resource: untyped): Tensor[byte] =
     res
 
 
+
 proc stbi_loadf(
   filename: cstring;
   x, y, channels_in_file: var cint;
   desired_channels: cint
 ): ptr cfloat
   {.importc: "stbi_loadf".}
+
 
 proc stbi_loadf_from_memory(
   buffer: ptr cuchar;
@@ -186,12 +188,14 @@ proc stbi_loadf_from_memory(
 ): ptr cfloat
   {.importc: "stbi_loadf_from_memory".}
 
+
 proc stbi_write_hdr(
   filename: cstring;
   x, y, channels: cint;
   data: ptr cfloat
 ): cint
   {.importc: "stbi_write_hdr".}
+
 
 proc stbi_write_hdr_to_func(
   fn: writeCallback;
@@ -200,6 +204,9 @@ proc stbi_write_hdr_to_func(
   data: ptr cfloat
 ): cint
   {.importc: "stbi_write_hdr_to_func".}
+
+
+proc stbi_image_free(p: pointer) {.importc: "stbi_image_free".}
 
 
 
@@ -226,6 +233,7 @@ template imageio_load_hdr_core(resource: untyped): Tensor[float32] =
         copyMem(pixelsOut[0].addr, data, pixelsOut.len * sizeof(cfloat))
 
         res = pixelsOut.toTensor().reshape([h.int, w, ch]).to_chw().asType(float32).asContiguous()
+        stbi_image_free(data)
       else:
         raise newException(IIOError, "LERoSI-IIO-HDR: Not an HDR format - " & $itype)
 
@@ -280,6 +288,8 @@ template write_hdr_impl[T](img: Tensor[T]): seq[byte] =
 
     cast[seq[byte]](buf.data)
 
+
+# TODO: Merge imageio_save_core variants using a macro.
 
 proc imageio_save_core[T](img: Tensor[T], filename: string, saveOpt: SaveOptions = SaveOptions(nil)): bool =
   let theOpt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
