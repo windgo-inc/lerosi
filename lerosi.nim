@@ -215,17 +215,11 @@ template imageio_load_hdr_core(resource: untyped): Tensor[float32] =
         let desired_ch = 0
         var w, h, ch: cint
 
-        var data: ptr cfloat
-        when resource is string:
-          data = stbi_loadf(resource.cstring, w, h, ch, desired_ch.cint)
-        else:
-          #let inputData = resource.toType(cfloat)
-          #var
-          #  castedBuffer: ptr cfloat = cast[ptr cfloat](resource[0].unsafeAddr)
-
-          data = stbi_loadf_from_memory(cast[ptr cuchar](resource[0].unsafeAddr), resource.len.cint, w, h, ch, desired_ch.cint)
-
-        #shallow(data)
+        let data: ptr cfloat =
+          when resource is string:
+            stbi_loadf(resource.cstring, w, h, ch, desired_ch.cint)
+          else:
+            stbi_loadf_from_memory(cast[ptr cuchar](resource[0].unsafeAddr), resource.len.cint, w, h, ch, desired_ch.cint)
         
         var pixelsOut: seq[cfloat]
         newSeq(pixelsOut, w*h*ch)
