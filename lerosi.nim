@@ -87,31 +87,37 @@ proc imageio_check_format[T](data: openarray[T]): ImageType =
   testImage(header)
 
 
-template channels[T](img: Tensor[T]): int =
-  ## Return number of channels of the image
-  img.shape[^3]
-
-
-template height[T](img: Tensor[T]): int =
-  ## Return height of the image
-  img.shape[^2]
-
-
-template width[T](img: Tensor[T]): int  =
-  ## Return width of the image
-  img.shape[^1]
+#template channels[T](img: Tensor[T]): int =
+#  ## Return number of channels of the image
+#  img.shape[^3]
+#
+#
+#template height[T](img: Tensor[T]): int =
+#  ## Return height of the image
+#  img.shape[^2]
+#
+#
+#template width[T](img: Tensor[T]): int  =
+#  ## Return width of the image
+#  img.shape[^1]
 
 
 proc channels*[T](img: ImageObject[T]): int {.inline, noSideEffect.} =
-  img.data.channels
+  case img.order:
+    of OrderPlanar: img.data[^3]
+    of OrderInterleaved: img.data[^1]
 
 
 proc width*[T](img: ImageObject[T]): int {.inline, noSideEffect.} =
-  img.data.width
+  case img.order:
+    of OrderPlanar: img.data[^1]
+    of OrderInterleaved: img.data[^2]
 
 
 proc height*[T](img: ImageObject[T]): int {.inline, noSideEffect.} =
-  img.data.height
+  case img.order:
+    of OrderPlanar: img.data[^2]
+    of OrderInterleaved: img.data[^3]
 
 
 template to_chw[T](img: Tensor[T]): Tensor[T] =
@@ -158,7 +164,7 @@ template imageio_load_core(resource: untyped): Tensor[byte] =
             stbi.loadFromMemory(resource.toType(byte), w, h, ch, desired_ch)
 
       
-        res = pixels.toTensor().reshape([h, w, ch]).to_chw().asType(byte).asContiguous()
+        res = pixels.toTensor().reshape([h, w, ch]).asType(byte)
       else:
         raise newException(IIOError, "LERoSI-IIO: Unsupported image format: " & $itype)
 
@@ -233,7 +239,7 @@ template imageio_load_hdr_core(resource: untyped): Tensor[float32] =
         newSeq(pixelsOut, w*h*ch)
         copyMem(pixelsOut[0].addr, data, pixelsOut.len * sizeof(cfloat))
 
-        res = pixelsOut.toTensor().reshape([h.int, w, ch]).to_chw().asType(float32).asContiguous()
+        res = pixelsOut.toTensor().reshape([h.int, w, ch]).asType(float32).asContiguous()
         stbi_image_free(data)
       else:
         raise newException(IIOError, "LERoSI-IIO-HDR: Not an HDR format - " & $itype)
@@ -248,24 +254,26 @@ template imageio_load_hdr_core(resource: untyped): Tensor[float32] =
     res
 
 
+# NOTE: We replaced width, height, and channel Tensor properties, since at the low level,
+# we implicily deal with interleaved data.
 
-template write_img_impl[T](img: Tensor[T], filename: string, iface: untyped): untyped =
-  iface(filename, img.width, img.height, img.channels, img.pixels)
+template write_img_impl[T](img: Tensor[T], U: typedesc, filename: string, iface: untyped): untyped =
+  iface(filename, img.shape[^2], img.shape[^3], img.shape[^1], img.asType(U).asContiguous().data)
 
-template write_img_impl[T](img: Tensor[T], filename: string, iface, opt: untyped): untyped =
-  iface(filename, img.width, img.height, img.channels, img.pixels, opt)
+template write_img_impl[T](img: Tensor[T], U: typedesc, filename: string, iface, opt: untyped): untyped =
+  iface(filename, img.shape[^2], img.shape[^3], img.shape[^1], img.asType(U).asContiguous().data, opt)
 
-template write_img_impl[T](img: Tensor[T], iface: untyped): untyped =
-  iface(img.width, img.height, img.channels, img.pixels)
+template write_img_impl[T](img: Tensor[T], U: typedesc, iface: untyped): untyped =
+  iface(img.shape[^2], img.shape[^3], img.shape[^1], img.asType(U).asContiguous().data)
 
-template write_img_impl[T](img: Tensor[T], iface, opt: untyped): untyped =
-  iface(img.width, img.height, img.channels, img.pixels, opt)
+template write_img_impl[T](img: Tensor[T], U: typedesc, iface, opt: untyped): untyped =
+  iface(img.shape[^2], img.shape[^3], img.shape[^1], img.asType(U).asContiguous().data, opt)
 
 template write_hdr_impl[T](img: Tensor[T], filename: string): untyped =
   block:
     let cimg = when img is Tensor[cfloat]: img else: img.asType(cfloat)
-    let data = cimg.to_hwc().asContiguous().data
-    let res = stbi_write_hdr(filename.cstring, cimg.width.cint, cimg.height.cint, cimg.channels.cint, data[0].unsafeAddr) == 1
+    let data = cimg.asContiguous().data
+    let res = stbi_write_hdr(filename.cstring, cimg.shape[^2].cint, cimg.shape[^3].cint, cimg.shape[^1].cint, data[0].unsafeAddr) == 1
 
     res
 
@@ -279,10 +287,10 @@ proc sequence_write(context, data: pointer, size: cint) {.cdecl.} =
 template write_hdr_impl[T](img: Tensor[T]): seq[byte] =
   block:
     let cimg = when img is Tensor[cfloat]: img else: img.asType(cfloat)
-    let data = cimg.to_hwc().asContiguous().data
+    let data = cimg.asContiguous().data
 
     var buf = newStringStream()
-    let res = stbi_write_hdr_to_func(sequence_write, buf.addr, cimg.width.cint, cimg.height.cint, cimg.channels.cint, data[0].unsafeAddr) == 1
+    let res = stbi_write_hdr_to_func(sequence_write, buf.addr, cimg.shape[^2].cint, cimg.shape[^3].cint, cimg.shape[^1].cint, data[0].unsafeAddr) == 1
 
     if not res:
       raise newException(IIOError, "LERoSI-IIO-HDR: Error writing to sequence.")
@@ -297,11 +305,11 @@ proc imageio_save_core[T](img: Tensor[T], filename: string, saveOpt: SaveOptions
 
   case theOpt.format:
     of BMP:
-      result = img.write_img_impl(filename, stbiw.writeBMP)
+      result = img.write_img_impl(byte, filename, stbiw.writeBMP)
     of PNG:
-      result = img.write_img_impl(filename, stbiw.writePNG, theOpt.stride)
+      result = img.write_img_impl(byte, filename, stbiw.writePNG, theOpt.stride)
     of JPEG:
-      result = img.write_img_impl(filename, stbiw.writeJPG, theOpt.quality)
+      result = img.write_img_impl(byte, filename, stbiw.writeJPG, theOpt.quality)
     of HDR:
       result = img.write_hdr_impl(filename)
     else:
@@ -313,11 +321,11 @@ proc imageio_save_core[T](img: Tensor[T], saveOpt: SaveOptions = SaveOptions(nil
 
   case theOpt.format:
     of BMP:
-      result = img.write_img_impl(stbiw.writeBMP)
+      result = img.write_img_impl(byte, stbiw.writeBMP)
     of PNG:
-      result = img.write_img_impl(stbiw.writePNG, theOpt.stride)
+      result = img.write_img_impl(byte, stbiw.writePNG, theOpt.stride)
     of JPEG:
-      result = img.write_img_impl(stbiw.writeJPG, theOpt.quality)
+      result = img.write_img_impl(byte, stbiw.writeJPG, theOpt.quality)
     of HDR:
       result = img.write_hdr_impl()
     else:
@@ -353,6 +361,49 @@ proc to_interleaved*[T](image: ImageObject[T]): ImageObject[T] {.noSideEffect, i
     ImageObject(data: image.data.to_hwc().asContiguous(), layout: image.layout, order: OrderInterleaved)
   else:
     image
+
+
+
+proc wrap_stbi_loadedlayout(channels: int): ImageChannelLayout {.noSideEffect, inline.} =
+  result = case channels:
+    of 1: CH_Y
+    of 2: CH_YA
+    of 3: CH_RGB
+    of 4: CH_RGBA
+    else: @[]
+
+
+#proc wrap_stbi_getsavelayout(layout: ImageChannelLayout): ImageChannelLayout {.noSideEffect, inline.} =
+#  result = case layout:
+#    of CH_Y: CH_Y
+#
+#    of CH_YA: CH_YA
+#    of CH_AY: CH_YA
+#    
+#    of CH_ARGB: CH_RGBA
+#    of CH_RGBA: CH_RGBA
+#
+#    of CH_RGB:  CH_RGB
+#    of CH_RGBX: CH_RGB
+#    of CH_XRGB: CH_RGB
+#
+#    of CH_YUV:    CH_RGB
+#    of CH_YCbCr:  CH_RGB
+
+
+proc read*[T: SomeNumber](filename: string): ImageObject[T] =
+  let data = filename.imageio_load_core()
+  var img = ImageObject(data: data, layout: data.shape[^1].imageio_core_loadedlayout, order: OrderInterleaved)
+
+
+proc read_hdr*[T: SomeReal](filename: string): ImageObject[T] =
+  let data = filename.imageio_load_hdr_core()
+  var img = ImageObject(data: data, layout: data.shape[^1].imageio_core_loadedlayout, order: OrderInterleaved)
+
+
+proc write*[T](image: ImageObject[T], opts: SaveOptions = SaveOptions(nil)): seq[byte] =
+  # TODO: Support swizzling channels
+  imageio_save_core(image.to_interleaved().data, opts)
 
 
 
