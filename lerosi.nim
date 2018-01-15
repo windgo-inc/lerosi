@@ -33,16 +33,17 @@ type
     C_AUX08, C_AUX09, C_AUX10, C_AUX11,
     C_AUX12, C_AUX13, C_AUX14, C_AUX15
 
-  ImageChannelBoundKind* = enum
-    Unbounded,
-    BoundLower,
-    BoundTotal
+  ImageChannelLayout* = seq[ImageChannel]
+
+  ImageDataOrdering* = enum
+    OrderInterleaved,
+    OrderPlanar
 
   ImageData*[T] = openarray[T]|Tensor[T]
 
   ImageObject*[T] = ref object
-    layout: seq[ImageChannel]
-    scale: array[2, T]
+    layout: ImageChannelLayout
+    order: ImageDataOrdering
     data: Tensor[T]
 
   IIOError* = object of Exception
@@ -321,6 +322,38 @@ proc imageio_save_core[T](img: Tensor[T], saveOpt: SaveOptions = SaveOptions(nil
       result = img.write_hdr_impl()
     else:
       raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $theOpt.format & ".")
+
+
+
+# Public interface begin
+
+proc newImageObject*[T](w, h: int; layout: ImageChannelLayout, order: ImageDataOrdering = OrderPlanar): ImageObject[T] {.noSideEffect, inline.} =
+  let data: Tensor[T] =
+    if order == OrderPlanar:
+      zeros[T](layout.len, h, w)
+    else:
+      zeros[T](h, w, layout.len)
+
+  result = ImageObject(data: data, layout: layout, order: order)
+
+
+proc newImageObjectRaw*[T](data: seq[T], layout: ImageChannelLayout, order: ImageDataOrdering): ImageObject[T] {.noSideEffect, inline.} =
+  ImageObject(data: data.toTensor, layout: layout, order: order)
+
+
+proc to_planar*[T](image: ImageObject[T]): ImageObject[T] {.noSideEffect, inline.} =
+  if image.order == OrderInterleaved:
+    ImageObject(data: image.data.to_chw().asContiguous(), layout: image.layout, order: OrderPlanar)
+  else:
+    image
+
+
+proc to_interleaved*[T](image: ImageObject[T]): ImageObject[T] {.noSideEffect, inline.} =
+  if image.order == OrderPlanar:
+    ImageObject(data: image.data.to_hwc().asContiguous(), layout: image.layout, order: OrderInterleaved)
+  else:
+    image
+
 
 
 when isMainModule:
