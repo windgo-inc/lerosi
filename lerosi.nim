@@ -4,6 +4,60 @@ import imghdr, arraymancer
 import stb_image/read as stbi
 import stb_image/write as stbiw
 
+const
+  MIN_CHAN = 0
+  MAX_CHAN = 15
+
+
+macro def_channels(x: varargs[string]): untyped =
+  result = newNimNode(nnkStmtList)
+
+  for n in x:
+    result.add(nnkConstSection.newTree(
+        nnkConstDef.newTree(
+          newIdentNode("CH_HOLY" & $n),
+          newEmptyNode(),
+          newLit($n)
+        )
+      )
+    )
+
+const
+  CH_RED = "R"
+  CH_GREEN = "G"
+  CH_BLUE = "B"
+
+  CH_CYAN = "c"
+  CH_MAGENTA = "m"
+  CH_YELLOW = "y"
+
+  CH_LUMINANCE = "Y"
+  CH_LUMA = "Y'"
+
+  CH_CHM_U = "u"
+  CH_CHM_V = "v"
+
+  CH_CHM_Cr = "Cr"
+  CH_CHM_Cb = "Cb"
+
+  CH_DEAD0 = "D0"
+  CH_DEAD1 = "D1"
+  CH_DEAD2 = "D2"
+  CH_DEAD3 = "D3"
+  CH_DEAD4 = "D4"
+  CH_DEAD5 = "D5"
+  CH_DEAD6 = "D6"
+  CH_DEAD7 = "D7"
+
+  CH_AUX0 = "A0"
+  CH_AUX1 = "A1"
+  CH_AUX2 = "A2"
+  CH_AUX3 = "A3"
+  CH_AUX4 = "A4"
+  CH_AUX5 = "A5"
+  CH_AUX6 = "A6"
+  CH_AUX7 = "A7"
+
 
 
 type
@@ -19,31 +73,29 @@ type
       discard
 
   ImageChannel* = enum
-    C_LUMINANCE
+    C_LUMINANCE = 0.int8
     C_RED, C_GREEN, C_BLUE,
     C_CYAN, C_MAGENTA, C_YELLOW
 
     C_LUMA, C_Chm_U, C_Chm_V, C_Chm_Cb, C_Chm_Cr
 
     C_ALPHA,
-
-    C_DEAD00, C_DEAD01, C_DEAD02, C_DEAD03,
-    C_DEAD04, C_DEAD05, C_DEAD06, C_DEAD07,
-    C_DEAD08, C_DEAD09, C_DEAD10, C_DEAD11,
-    C_DEAD12, C_DEAD13, C_DEAD14, C_DEAD15
+    C_DEAD,
 
     C_AUX00, C_AUX01, C_AUX02, C_AUX03,
     C_AUX04, C_AUX05, C_AUX06, C_AUX07,
     C_AUX08, C_AUX09, C_AUX10, C_AUX11,
     C_AUX12, C_AUX13, C_AUX14, C_AUX15
 
-  ImageChannelLayout* = seq[ImageChannel]
+  ImageChannelLayout* = object
+    channels: array[MIN_CHAN..MAX_CHAN, ImageChannel]
+    count: int
 
   ImageDataOrdering* = enum
     OrderInterleaved,
     OrderPlanar
 
-  ImageData*[T] = openarray[T]|Tensor[T]
+  ImageData*[T] = openarray[T] or Tensor[T]
 
   ImageObject*[T] = ref object
     layout: ImageChannelLayout
@@ -53,22 +105,52 @@ type
   IIOError* = object of Exception
 
 
+converter as_image_channels(channels: openarray[ImageChannel]): ImageChannelLayout {.inline, noSideEffect.} =
+  result.channels[0..channels.len-1] = channels
+  result.count = channels.len
+
+
+proc channel_index*(layout: ImageChannelLayout, ch: ImageChannel): int {.inline, noSideEffect.} =
+  layout.channels.find(ch)
+
+
+template luminance_index*(layout: ImageChannelLayout): int = layout.channel_index(C_LUMINANCE)
+template lumi_index*(layout: ImageChannelLayout): int = layout.channel_index(C_LUMINANCE)
+
+template red_index*(layout: ImageChannelLayout): int = layout.channel_index(C_RED)
+template green_index*(layout: ImageChannelLayout): int = layout.channel_index(C_GREEN)
+template blue_index*(layout: ImageChannelLayout): int = layout.channel_index(C_BLUE)
+
+template cyan_index*(layout: ImageChannelLayout): int = layout.channel_index(C_CYAN)
+template magenta_index*(layout: ImageChannelLayout): int = layout.channel_index(C_MAGENTA)
+template yellow_index*(layout: ImageChannelLayout): int = layout.channel_index(C_YELLOW)
+
+template alpha_index*(layout: ImageChannelLayout): int = layout.channel_index(C_ALPHA)
+
+template luma_index*(layout: ImageChannelLayout): int = layout.channel_index(C_LUMA)
+
+template chmU_index*(layout: ImageChannelLayout): int = layout.channel_index(C_ChmU)
+template chmV_index*(layout: ImageChannelLayout): int = layout.channel_index(C_ChmV)
+
+template chmCb_index*(layout: ImageChannelLayout): int = layout.channel_index(C_ChmCb)
+template chmCr_index*(layout: ImageChannelLayout): int = layout.channel_index(C_ChmCr)
+
 const
-  CH_Y*     = @[C_LUMINANCE]
-  CH_YA*    = @[C_LUMINANCE, C_ALPHA]
-  CH_AY*    = @[C_ALPHA, C_LUMINANCE]
-  CH_RGB*   = @[C_RED, C_GREEN, C_BLUE]
-  CH_RGBA*  = @[C_RED, C_GREEN, C_BLUE, C_ALPHA]
-  CH_ARGB*  = @[C_ALPHA, C_RED, C_GREEN, C_BLUE]
-  CH_RGBX*  = @[C_RED, C_GREEN, C_BLUE, C_DEAD0]
-  CH_XRGB*  = @[C_DEAD0, C_RED, C_GREEN, C_BLUE]
-  CH_BGR*   = @[C_RED, C_GREEN, C_BLUE]
-  CH_BGRA*  = @[C_BLUE, C_GREEN, C_RED, C_ALPHA]
-  CH_ABGR*  = @[C_ALPHA, C_BLUE,C_GREEN, C_RED]
-  CH_BGRX*  = @[C_BLUE, C_GREEN, C_RED, C_DEAD0]
-  CH_XBGR*  = @[C_DEAD0, C_BLUE,C_GREEN, C_RED]
-  CH_YUV*   = @[C_LUMA, C_Chm_U, C_Chm_V]
-  CH_YCbCr* = @[C_LUMA, C_Chm_Cb, C_Chm_Cr]
+  CH_Y*     = [C_LUMINANCE].as_image_channels
+  CH_YA*    = [C_LUMINANCE, C_ALPHA].as_image_channels
+  CH_AY*    = [C_ALPHA, C_LUMINANCE].as_image_channels
+  CH_RGB*   = [C_RED, C_GREEN, C_BLUE].as_image_channels
+  CH_RGBA*  = [C_RED, C_GREEN, C_BLUE, C_ALPHA].as_image_channels
+  CH_ARGB*  = [C_ALPHA, C_RED, C_GREEN, C_BLUE].as_image_channels
+  CH_RGBX*  = [C_RED, C_GREEN, C_BLUE, C_DEAD].as_image_channels
+  CH_XRGB*  = [C_DEAD, C_RED, C_GREEN, C_BLUE].as_image_channels
+  CH_BGR*   = [C_RED, C_GREEN, C_BLUE].as_image_channels
+  CH_BGRA*  = [C_BLUE, C_GREEN, C_RED, C_ALPHA].as_image_channels
+  CH_ABGR*  = [C_ALPHA, C_BLUE,C_GREEN, C_RED].as_image_channels
+  CH_BGRX*  = [C_BLUE, C_GREEN, C_RED, C_DEAD].as_image_channels
+  CH_XBGR*  = [C_DEAD, C_BLUE,C_GREEN, C_RED].as_image_channels
+  CH_YUV*   = [C_LUMA, C_Chm_U, C_Chm_V].as_image_channels
+  CH_YCbCr* = [C_LUMA, C_Chm_Cb, C_Chm_Cr].as_image_channels
 
 
 template toType*[U](d: openarray[U], T: typedesc): untyped =
@@ -374,7 +456,7 @@ proc wrap_stbi_loadedlayout(channels: int): ImageChannelLayout {.noSideEffect, i
     of 2: CH_YA
     of 3: CH_RGB
     of 4: CH_RGBA
-    else: @[]
+    else: [].as_image_channels
 
 
 #proc wrap_stbi_getsavelayout(layout: ImageChannelLayout): ImageChannelLayout {.noSideEffect, inline.} =
