@@ -56,19 +56,19 @@ proc emptyChannelNames*(): ChannelNameArray =
   result.len = 0
 
 proc `$`(layout_id: ChannelLayoutId): string {.inline.} =
-  result = ["ChannelLayout(", $(layout_id.int), ")"].join
+  ["ChannelLayout(", $(layout_id.int), ")"].join
 
 proc name*(layout_id: ChannelLayoutId): string {.inline.} =
-  result = channelLayoutNameSeq[layout_id.int]
-
-proc channels*(layout_id: ChannelLayoutId): ChannelNameArray {.inline.} =
-  result = channelLayoutChannelsSeq[layout_id.int]
+  channelLayoutNameSeq[layout_id.int]
 
 proc len*(layout_id: ChannelLayoutId): int {.inline.} =
-  result = channelLayoutChannelsSeq[layout_id.int].len
+  channelLayoutChannelsSeq[layout_id.int].len
+
+proc channels*(layout_id: ChannelLayoutId): ChannelNameArray {.inline.} =
+  channelLayoutChannelsSeq[layout_id.int]
 
 proc channel*(layout_id: ChannelLayoutId, name: string): int {.inline.} =
-  result = channelLayoutChannelsSeq[layout_id.int].find(name)
+  channelLayoutChannelsSeq[layout_id.int].find(name)
 
 
 proc declareChannelLayoutImpl(nameNode: NimNode): NimNode {.compileTime.} =
@@ -104,7 +104,6 @@ proc declareChannelLayoutImpl(nameNode: NimNode): NimNode {.compileTime.} =
   var intermediate = newStmtList()
   for i, name in chans:
     let nameIdent = ident("Ch" & name)
-    let chIdIdent = ident("ChId" & name)
     let nameLit = newStrLitNode(name)
 
     let accessor = quote do:
