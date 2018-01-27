@@ -38,24 +38,25 @@ proc nodeToStr(node: NimNode): string {.compileTime.} =
   
 
 var channelLayoutIdCounter {.compileTime.} = 0
-var channelIdCounter {.compileTime.} = 0
 
 type
   ChannelLayout* = object of RootObj
   ChannelLayoutId* = distinct int
-  ChannelId = distinct int
 
   ChannelNameArray* = FixedSeq[string, MAX_CHANNELS]
+  ChannelIndexArray* = FixedSeq[int, MAX_CHANNELS]
+
+  ChannelLayoutDesc* = typedesc[ChannelLayout] or ChannelLayoutId
 
 var
   channelLayoutNameSeq = newSeq[string]()
   channelLayoutChannelsSeq = newSeq[ChannelNameArray]()
 
 
-proc emptyChannelNames*(): ChannelNameArray =
+proc emptyChannelNames*(): ChannelNameArray {.inline, raises: [].} =
   result.len = 0
 
-proc `$`(layout_id: ChannelLayoutId): string {.inline.} =
+proc `$`(layout_id: ChannelLayoutId): string {.inline, raises: [].} =
   ["ChannelLayout(", $(layout_id.int), ")"].join
 
 proc name*(layout_id: ChannelLayoutId): string {.inline.} =
@@ -71,7 +72,7 @@ proc channel*(layout_id: ChannelLayoutId, name: string): int {.inline.} =
   channelLayoutChannelsSeq[layout_id.int].find(name)
 
 
-proc declareChannelLayoutImpl(nameNode: NimNode): NimNode {.compileTime.} =
+proc declareChannelLayoutImpl*(nameNode: NimNode): NimNode {.compileTime.} =
   var id = channelLayoutIdCounter
   inc(channelLayoutIdCounter)
 
@@ -120,44 +121,72 @@ proc declareChannelLayoutImpl(nameNode: NimNode): NimNode {.compileTime.} =
   intermediate.copyChildrenTo(result)
 
 
-proc declareChannelLayoutPermuteImpl(nameNode: NimNode): NimNode {.compileTime.} =
+proc declareChannelLayoutPermuteImpl(nameNode: NimNode, stmts: var NimNode) {.compileTime.} =
   var
     channels = capitalTokens(nodeToStr(nameNode))
 
-  result = newStmtList()
-
   sort(channels, system.cmp)
   while true:
-    declareChannelLayoutImpl(newStrLitNode(channels.join)).copyChildrenTo(result)
+    declareChannelLayoutImpl(newStrLitNode(channels.join)).copyChildrenTo(stmts)
     
     if not nextPermutation(channels):
       break
 
 
-proc declareChannelGroupSeq(node: NimNode): NimNode {.compileTime.} =
-  result = newStmtList()
+proc declareChannelGroupSeq(node: NimNode, stmts: var NimNode) {.compileTime.} =
   case node.kind:
     of nnkStrLit, nnkRStrLit, nnkIdent:
-      declareChannelLayoutPermuteImpl(node).copyChildrenTo(result)
+      declareChannelLayoutPermuteImpl(node, stmts)
     of nnkBracket:
       for child in node.children:
-        declareChannelGroupSeq(child).copyChildrenTo(result)
+        declareChannelGroupSeq(child, stmts)
     else:
       quit "Expected string literal, identifier, or bracketed expression."
 
 
+proc declareChannelGroupsImpl*(nameNodes: openarray[NimNode], stmts: var NimNode) {.compileTime.} =
+  for node in nameNodes:
+    declareChannelGroupSeq(node, stmts)
+
+
+proc declareChannelGroupsWithAlphaImpl*(nameNodes: openarray[NimNode], stmts: var NimNode) {.compileTime.} =
+  var extNodes = newSeqOfCap[NimNode](nameNodes.len * 2)
+  for node in nameNodes:
+    let nodeStr = nodeToStr(node)
+    extNodes.add(ident(nodeStr))
+    extNodes.add(ident(nodeStr & "A"))
+
+  declareChannelGroupsImpl(extNodes, stmts)
+
 macro declareChannelGroups*(nameNodes: varargs[untyped]): untyped =
   result = newStmtList()
-  for node in nameNodes:
-    declareChannelGroupSeq(node).copyChildrenTo(result)
+  var nodes = newSeqOfCap[NimNode](nameNodes.len)
+  for node in nameNodes: nodes.add(node)
+  declareChannelGroupsWithAlphaImpl(nodes, result)
 
-#proc getSwizzle(a: typedesc[])
+
+declareChannelGroups(
+  "RGB",    # Red, Green, Blue
+  "CMYe",   # Cyan, Magenta, Yellow
+  "HSV",    # Hue, Saturation, Value
+  "YCbCr",  # Luminance, Blue Difference, Red Difference
+  "YpCbCr", # Luma, Blue Difference, Red Difference
+  "Y",      # Luminance
+  "Yp"      # Luma
+)
+
+
+proc cmpChannels*(a: typedesc, b: typedesc): ChannelIndexArray {.noSideEffect, inline, raises: [].} =
+  for name in b.channels:
+    result.add(find(a.channels, name))
+
+
+proc cmpChannels*(a: ChannelLayoutId, b: ChannelLayoutId): ChannelIndexArray {.noSideEffect, inline.} =
+  for name in b.channels:
+    result.add(find(a.channels, name))
+
 
 when isMainModule:
-  #expandMacros:
-  declareChannelGroups("RGB", "YUV", "YCbCr")
-  declareChannelGroups("RGBA", "YUVA", "YCbCrA")
-
   template doRGBAProcs(what: untyped): untyped =
     echo what.name, ".ChR = ", what.ChR, " ", what.name, ".channel(\"R\") = ", what.channel("R")
     echo what.name, ".ChG = ", what.ChG, " ", what.name, ".channel(\"G\") = ", what.channel("G")
@@ -168,6 +197,9 @@ when isMainModule:
     echo what.name, ".ChY  = ", what.ChY,  " ", what.name, ".channel(\"Y\")  = ", what.channel("Y")
     echo what.name, ".ChCb = ", what.ChCb, " ", what.name, ".channel(\"Cb\") = ", what.channel("Cb")
     echo what.name, ".ChCr = ", what.ChCr, " ", what.name, ".channel(\"Cr\") = ", what.channel("Cr")
+
+  template doCmpChannelsTest(nam: untyped, a: untyped, b: untyped): untyped =
+    echo "cmpChannels(", nam(a), ", ", nam(b), ") = ", cmpChannels(a, b)
 
   static:
     echo "*** COMPILE TIME TESTS ***"
@@ -184,6 +216,14 @@ when isMainModule:
     doTest(YCbCr): doYCbCrProcs(YCbCr)
     doTest(YCrCb): doYCbCrProcs(YCrCb)
 
+    echo " ~ cmpChannels ~"
+    doCmpChannelsTest(name, RGBA, RGBA)
+    doCmpChannelsTest(name, RGBA, ARGB)
+    doCmpChannelsTest(name, RGBA, RGB)
+    doCmpChannelsTest(name, RGBA, BGRA)
+    doCmpChannelsTest(name, RGBA, ABGR)
+    doCmpChannelsTest(name, RGBA, BGR)
+
   echo "*** RUN TIME TESTS ***"
   let myLayouts = [RGBA.id, BGRA.id, YCbCr.id, YCrCb.id]
   for i, layout in myLayouts:
@@ -191,5 +231,13 @@ when isMainModule:
     echo layout.name, ".len = ", layout.len
     echo layout.name, ".channels = ", @(layout.channels)
     if i > 1: doYCbCrProcs(layout) else: doRGBAProcs(layout)
+
+  echo " ~ cmpChannels ~"
+  doCmpChannelsTest(name, RGBA.id, RGBA.id)
+  doCmpChannelsTest(name, RGBA.id, ARGB.id)
+  doCmpChannelsTest(name, RGBA.id, RGB.id)
+  doCmpChannelsTest(name, RGBA.id, BGRA.id)
+  doCmpChannelsTest(name, RGBA.id, ABGR.id)
+  doCmpChannelsTest(name, RGBA.id, BGR.id)
     
 
