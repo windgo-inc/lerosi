@@ -3,7 +3,18 @@ import strutils, sequtils, sets, algorithm
 import fixedseq
 
 
-const MAX_CHANNELS = 16
+const
+  MAX_CHANNELS = 16
+
+
+type
+  ChannelLayout* = object of RootObj
+  ChannelLayoutId* = distinct int
+
+  ChannelNameArray* = FixedSeq[string, MAX_CHANNELS]
+  ChannelIndexArray* = FixedSeq[int, MAX_CHANNELS]
+
+  ChannelLayoutDesc* = typedesc[ChannelLayout] or ChannelLayoutId
 
 
 iterator capitalTokenIter(str: string): string =
@@ -37,16 +48,8 @@ proc nodeToStr(node: NimNode): string {.compileTime.} =
       quit "Expected identifier or string as channel layout specifier, but got " & $node & "."
   
 
-var channelLayoutIdCounter {.compileTime.} = 0
-
-type
-  ChannelLayout* = object of RootObj
-  ChannelLayoutId* = distinct int
-
-  ChannelNameArray* = FixedSeq[string, MAX_CHANNELS]
-  ChannelIndexArray* = FixedSeq[int, MAX_CHANNELS]
-
-  ChannelLayoutDesc* = typedesc[ChannelLayout] or ChannelLayoutId
+var
+  channelLayoutIdCounter {.compileTime.} = 0
 
 var
   channelLayoutNameSeq = newSeq[string]()
