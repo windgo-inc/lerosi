@@ -8,6 +8,9 @@ import lerosi/channels
 
 export channels, iio_types
 
+const
+  loaded_channel_layouts = [ChLayoutYp.id,ChLayoutYpA.id,ChLayoutRGB.id,ChLayoutRGBA.id]
+
 # TODO: Full rework.
 # Public interface begin
 
@@ -39,16 +42,6 @@ proc to_interleaved*[T](image: ImageObject[T]): ImageObject[T] {.noSideEffect, i
     image
 
 
-
-const
-  loaded_channel_layouts = [
-    ChLayoutYp.id,
-    ChLayoutYpA.id,
-    ChLayoutRGB.id,
-    ChLayoutRGBA.id
-  ]
-
-
 proc wrap_stbi_loadedlayout_ranged(channels: range[1..4]): ChannelLayoutId {.noSideEffect, inline, raises: [].} =
   result = loaded_channel_layouts[channels - 1]
 
@@ -59,24 +52,6 @@ proc wrap_stbi_loadedlayout(channels: int): ChannelLayoutId {.noSideEffect, inli
     result = wrap_stbi_loadedlayout_ranged(channels)
   else:
     raise newException(IIOError, "wrap_stbi_loadedlayout: Channel count must be between 1 and 4.")
-
-
-#proc wrap_stbi_getsavelayout(layout: ChannelLayout): ChannelLayout {.noSideEffect, inline.} =
-#  result = case layout:
-#    of CH_Y: CH_Y
-#
-#    of CH_YA: CH_YA
-#    of CH_AY: CH_YA
-#    
-#    of CH_ARGB: CH_RGBA
-#    of CH_RGBA: CH_RGBA
-#
-#    of CH_RGB:  CH_RGB
-#    of CH_RGBX: CH_RGB
-#    of CH_XRGB: CH_RGB
-#
-#    of CH_YUV:    CH_RGB
-#    of CH_YCbCr:  CH_RGB
 
 
 proc read*[T: SomeNumber](filename: string): ImageObject[T] =
@@ -90,7 +65,6 @@ proc read_hdr*[T: SomeReal](filename: string): ImageObject[T] =
 
 
 proc write*[T](image: ImageObject[T], opts: SaveOptions = SaveOptions(nil)): seq[byte] =
-  # TODO: Support swizzling channels
   imageio_save_core(image.to_interleaved().data, opts)
 
 

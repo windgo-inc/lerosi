@@ -29,21 +29,6 @@ proc imageio_check_format*[T](data: openarray[T]): ImageType =
   testImage(header)
 
 
-#template channels[T](img: Tensor[T]): int =
-#  ## Return number of channels of the image
-#  img.shape[^3]
-#
-#
-#template height[T](img: Tensor[T]): int =
-#  ## Return height of the image
-#  img.shape[^2]
-#
-#
-#template width[T](img: Tensor[T]): int  =
-#  ## Return width of the image
-#  img.shape[^1]
-
-
 proc channels*[T](img: ImageObject[T]): int {.inline, noSideEffect.} =
   case img.order:
     of OrderPlanar: img.data[^3]
