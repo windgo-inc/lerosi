@@ -56,7 +56,7 @@ var
 proc emptyChannelNames*(): ChannelNameArray {.inline, raises: [].} =
   result.len = 0
 
-proc `$`(layout_id: ChannelLayoutId): string {.inline, raises: [].} =
+proc `$`*(layout_id: ChannelLayoutId): string {.inline, raises: [].} =
   ["ChannelLayout(", $(layout_id.int), ")"].join
 
 proc name*(layout_id: ChannelLayoutId): string {.inline.} =
@@ -78,8 +78,9 @@ proc declareChannelLayoutImpl*(nameNode: NimNode): NimNode {.compileTime.} =
 
   let
     name = nodeToStr(nameNode)
+    givenname = "ChLayout" & name
 
-    layoutIdent = ident(name)
+    layoutIdent = ident(givenname)
 
     chans = capitalTokens(`name`)
     nCh = chans.len
@@ -91,14 +92,14 @@ proc declareChannelLayoutImpl*(nameNode: NimNode): NimNode {.compileTime.} =
     type
       `layoutIdent`* = object of ChannelLayout
 
-    proc id*(layout: typedesc[`layoutIdent`]): ChannelLayoutId {.inline, raises: [].} = ChannelLayoutId(`id`)
-    proc len*(layout: typedesc[`layoutIdent`]): Natural {.inline, raises: [].} = `nCh`
-    proc name*(layout: typedesc[`layoutIdent`]): string {.inline, raises: [].} = `name`
-    proc channels*(layout: typedesc[`layoutIdent`]): array[0..`maxCh`, string] {.inline, raises: [].} = `chans`
-    proc channel*(layout: typedesc[`layoutIdent`], name: string): int {.inline, raises: [].} = find(`chans`, name)
+    proc id*(layout: typedesc[`layoutIdent`]): ChannelLayoutId {.noSideEffect, inline, raises: [].} = ChannelLayoutId(`id`)
+    proc len*(layout: typedesc[`layoutIdent`]): Natural {.noSideEffect, inline, raises: [].} = `nCh`
+    proc name*(layout: typedesc[`layoutIdent`]): string {.noSideEffect, inline, raises: [].} = `givenname`
+    proc channels*(layout: typedesc[`layoutIdent`]): array[0..`maxCh`, string] {.noSideEffect, inline, raises: [].} = `chans`
+    proc channel*(layout: typedesc[`layoutIdent`], name: string): int {.noSideEffect, inline, raises: [].} = find(`chans`, name)
 
   # Add the runtime channel layout table insertion code.
-  result.add(newCall(bindSym"add", [ident"channelLayoutNameSeq", newStrLitNode(name)]))
+  result.add(newCall(bindSym"add", [ident"channelLayoutNameSeq", newStrLitNode(givenname)]))
   result.add(newCall(bindSym"add", [ident"channelLayoutChannelsSeq", newCall(bindSym"emptyChannelNames", [])]))
 
   # Add named channel accessors procedures
@@ -210,22 +211,22 @@ when isMainModule:
       echo layoutType.name, ".channels = ", @(layoutType.channels)
       body
     
-    doTest(RGBA): doRGBAProcs(RGBA)
-    doTest(BGRA): doRGBAProcs(BGRA)
+    doTest(ChLayoutRGBA): doRGBAProcs(ChLayoutRGBA)
+    doTest(ChLayoutBGRA): doRGBAProcs(ChLayoutBGRA)
 
-    doTest(YCbCr): doYCbCrProcs(YCbCr)
-    doTest(YCrCb): doYCbCrProcs(YCrCb)
+    doTest(ChLayoutYCbCr): doYCbCrProcs(ChLayoutYCbCr)
+    doTest(ChLayoutYCrCb): doYCbCrProcs(ChLayoutYCrCb)
 
     echo " ~ cmpChannels ~"
-    doCmpChannelsTest(name, RGBA, RGBA)
-    doCmpChannelsTest(name, RGBA, ARGB)
-    doCmpChannelsTest(name, RGBA, RGB)
-    doCmpChannelsTest(name, RGBA, BGRA)
-    doCmpChannelsTest(name, RGBA, ABGR)
-    doCmpChannelsTest(name, RGBA, BGR)
+    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutRGBA)
+    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutARGB)
+    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutRGB)
+    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutBGRA)
+    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutABGR)
+    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutBGR)
 
   echo "*** RUN TIME TESTS ***"
-  let myLayouts = [RGBA.id, BGRA.id, YCbCr.id, YCrCb.id]
+  let myLayouts = [ChLayoutRGBA.id, ChLayoutBGRA.id, ChLayoutYCbCr.id, ChLayoutYCrCb.id]
   for i, layout in myLayouts:
     echo "Testing ", layout.name, " ", layout, ":"
     echo layout.name, ".len = ", layout.len
@@ -233,11 +234,11 @@ when isMainModule:
     if i > 1: doYCbCrProcs(layout) else: doRGBAProcs(layout)
 
   echo " ~ cmpChannels ~"
-  doCmpChannelsTest(name, RGBA.id, RGBA.id)
-  doCmpChannelsTest(name, RGBA.id, ARGB.id)
-  doCmpChannelsTest(name, RGBA.id, RGB.id)
-  doCmpChannelsTest(name, RGBA.id, BGRA.id)
-  doCmpChannelsTest(name, RGBA.id, ABGR.id)
-  doCmpChannelsTest(name, RGBA.id, BGR.id)
+  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutRGBA.id)
+  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutARGB.id)
+  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutRGB.id)
+  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutBGRA.id)
+  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutABGR.id)
+  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutBGR.id)
     
 
