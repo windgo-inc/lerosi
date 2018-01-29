@@ -1,5 +1,8 @@
 import system, unittest, macros, math
-import typetraits, lerosi
+import typetraits
+
+import lerosi
+import lerosi/iio_core
 
 suite "Group of tests":
   test "Image Core I/O":

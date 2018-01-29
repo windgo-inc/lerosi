@@ -1,6 +1,6 @@
 import os, system, macros, future
 import strutils, sequtils, sets, algorithm
-import fixedseq
+import ./fixedseq
 
 
 const
