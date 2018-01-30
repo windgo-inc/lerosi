@@ -128,10 +128,14 @@ template to_hwc[T](data: Tensor[T]): Tensor[T] =
   data.permute(1, 2, 0)
 
 
-proc channels*[O: ImageObjectRef](img: O): int {.inline, noSideEffect.} =
-  case img.order:
-    of OrderPlanar: img.data[^3]
-    of OrderInterleaved: img.data[^1]
+proc channelCount*[O: DynamicLayoutImageRef](img: O):
+             range[1..MAX_IMAGE_CHANNELS] {.inline, noSideEffect.} =
+  img.layoutId.len
+
+
+proc channelCount*[O: StaticLayoutImageRef](img: O):
+             range[1..MAX_IMAGE_CHANNELS] {.inline, noSideEffect, raises: [].} =
+  O.L.len
 
 
 proc width*[O: ImageObjectRef](img: O): int {.inline, noSideEffect.} =

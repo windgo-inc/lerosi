@@ -4,8 +4,9 @@ import ./fixedseq
 
 
 const
-  MAX_CHANNELS = 16
+  MAX_IMAGE_CHANNELS* = 7
 
+{.deprecated: [MAX_CHANNELS: MAX_IMAGE_CHANNELS].}
 
 type
   ChannelLayout* = object of RootObj
