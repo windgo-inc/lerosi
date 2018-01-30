@@ -9,12 +9,17 @@ import lerosi/channels
 export channels, iio_types
 
 const
-  loaded_channel_layouts = [ChLayoutYp.id,ChLayoutYpA.id,ChLayoutRGB.id,ChLayoutRGBA.id]
+  loaded_channel_layouts = [
+    ChLayoutYp.id, ChLayoutYpA.id,
+    ChLayoutRGB.id, ChLayoutRGBA.id
+  ]
 
 # TODO: Full rework.
 # Public interface begin
 
-proc newImageObject*[T](w, h: int; layout: ChannelLayout, order: ImageDataOrdering = OrderPlanar): ImageObject[T] {.noSideEffect, inline.} =
+proc newImageObject*[T](w, h: int; layout: ChannelLayout;
+                        order: ImageDataOrdering = OrderPlanar):
+                        ImageObject[T] {.noSideEffect, inline.} =
   let data: Tensor[T] =
     if order == OrderPlanar:
       zeros[T](layout.len, h, w)
@@ -24,29 +29,39 @@ proc newImageObject*[T](w, h: int; layout: ChannelLayout, order: ImageDataOrderi
   result = ImageObject(data: data, layout: layout, order: order)
 
 
-proc newImageObjectRaw*[T](data: seq[T], layout: ChannelLayout, order: ImageDataOrdering): ImageObject[T] {.noSideEffect, inline.} =
+proc newImageObjectRaw*[T](data: seq[T]; layout: ChannelLayout;
+                           order: ImageDataOrdering):
+                           ImageObject[T] {.noSideEffect, inline.} =
   ImageObject(data: data.toTensor, layout: layout, order: order)
 
 
-proc to_planar*[T](image: ImageObject[T]): ImageObject[T] {.noSideEffect, inline.} =
+proc to_planar*[T](image: ImageObject[T]):
+                   ImageObject[T] {.noSideEffect, inline.} =
   if image.order == OrderInterleaved:
-    ImageObject(data: image.data.to_chw().asContiguous(), layout: image.layout, order: OrderPlanar)
+    ImageObject(
+      data: image.data.to_chw().asContiguous(),
+      layout: image.layout, order: OrderPlanar)
   else:
     image
 
 
-proc to_interleaved*[T](image: ImageObject[T]): ImageObject[T] {.noSideEffect, inline.} =
+proc to_interleaved*[T](image: ImageObject[T]):
+                        ImageObject[T] {.noSideEffect, inline.} =
   if image.order == OrderPlanar:
-    ImageObject(data: image.data.to_hwc().asContiguous(), layout: image.layout, order: OrderInterleaved)
+    ImageObject(
+      data: image.data.to_hwc().asContiguous(),
+      layout: image.layout, order: OrderInterleaved)
   else:
     image
 
 
-proc wrap_stbi_loadedlayout_ranged(channels: range[1..4]): ChannelLayoutId {.noSideEffect, inline, raises: [].} =
+proc wrap_stbi_loadedlayout_ranged(channels: range[1..4]):
+                        ChannelLayoutId {.noSideEffect, inline, raises: [].} =
   result = loaded_channel_layouts[channels - 1]
 
 
-proc wrap_stbi_loadedlayout(channels: int): ChannelLayoutId {.noSideEffect, inline.} =
+proc wrap_stbi_loadedlayout(channels: int):
+                        ChannelLayoutId {.noSideEffect, inline.} =
   if channels >= 1 and channels <= 4:
     # Compiler has proof that channels is in range by getting here.
     result = wrap_stbi_loadedlayout_ranged(channels)
@@ -56,15 +71,18 @@ proc wrap_stbi_loadedlayout(channels: int): ChannelLayoutId {.noSideEffect, inli
 
 proc read*[T: SomeNumber](filename: string): ImageObject[T] =
   let data = filename.imageio_load_core()
-  var img = ImageObject(data: data, layout: data.shape[^1].imageio_core_loadedlayout().id, order: OrderInterleaved)
-
+  ImageObject(data: data,
+    layout: data.shape[^1].imageio_core_loadedlayout().id,
+    order: OrderInterleaved)
 
 proc read_hdr*[T: SomeReal](filename: string): ImageObject[T] =
   let data = filename.imageio_load_hdr_core()
-  var img = ImageObject(data: data, layout: data.shape[^1].imageio_core_loadedlayout().id, order: OrderInterleaved)
+  ImageObject(data: data,
+    layout: data.shape[^1].imageio_core_loadedlayout().id,
+    order: OrderInterleaved)
 
-
-proc write*[T](image: ImageObject[T], opts: SaveOptions = SaveOptions(nil)): seq[byte] =
+proc write*[T](image: ImageObject[T];
+               opts: SaveOptions = SaveOptions(nil)): seq[byte] =
   imageio_save_core(image.to_interleaved().data, opts)
 
 
