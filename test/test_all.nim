@@ -65,6 +65,7 @@ suite "Group of tests":
     echo "Properties of 'test/sample.png':"
     echo "  channelLayoutLen:  ", mypic.channelLayoutLen
     echo "  channelLayoutName: ", mypic.channelLayoutName
+    echo "  channels:          ", mypic.channels
     echo "  width:             ", mypic.width
     echo "  height:            ", mypic.height
 
@@ -76,6 +77,7 @@ suite "Group of tests":
     echo "Properties of 'test/samplepng-out.bmp':"
     echo "  channelLayoutLen:  ", mypic2.channelLayoutLen
     echo "  channelLayoutName: ", mypic2.channelLayoutName
+    echo "  channels:          ", mypic2.channels
     echo "  width:             ", mypic2.width
     echo "  height:            ", mypic2.height
 
@@ -87,6 +89,7 @@ suite "Group of tests":
     echo "Properties of 'test/samplepng-out.jpeg':"
     echo "  channelLayoutLen:  ", mypicjpeg.channelLayoutLen
     echo "  channelLayoutName: ", mypicjpeg.channelLayoutName
+    echo "  channels:          ", mypicjpeg.channels
     echo "  width:             ", mypicjpeg.width
     echo "  height:            ", mypicjpeg.height
 
