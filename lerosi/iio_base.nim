@@ -28,13 +28,13 @@ proc wrap_stbi_loadedlayout(channels: int):
       "wrap_stbi_loadedlayout: Channel count must be between 1 and 4.")
 
 
-proc readImage*[T: SomeNumber](filename: string): DynamicLayoutImage[T] =
+proc readImage*[T: SomeNumber](filename: string): DynamicLayoutImageRef[T] =
   let data = filename.imageio_load_core()
   newDynamicLayoutImageRaw[T](data.asType(T),
     data.shape[^1].wrap_stbi_loadedlayout(),
     OrderInterleaved)
 
-proc readHdrImage*[T: SomeReal](filename: string): DynamicLayoutImage[T] =
+proc readHdrImage*[T: SomeReal](filename: string): DynamicLayoutImageRef[T] =
   let data = filename.imageio_load_hdr_core()
   newDynamicLayoutImageRaw[T](data.asType(T),
     data.shape[^1].wrap_stbi_loadedlayout(),
