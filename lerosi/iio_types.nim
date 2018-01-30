@@ -1,4 +1,4 @@
-
+import macros
 import system, arraymancer
 import ./channels
 
@@ -128,26 +128,36 @@ template to_hwc[T](data: Tensor[T]): Tensor[T] =
   data.permute(1, 2, 0)
 
 
-proc channelCount*[O: DynamicLayoutImageRef](img: O):
-             range[1..MAX_IMAGE_CHANNELS] {.inline, noSideEffect.} =
-  img.layoutId.len
+macro staticDynamicImageGetter(procname: untyped, returntype: untyped, inner: untyped): untyped =
+  result = quote do:
+    proc `procname`*[O: DynamicLayoutImageRef](img: O): `returntype` {.inline, noSideEffect.} =
+      ## Dynamic image channel layout variant of `procname`.
+      `inner`(img.lid)
+
+    proc `procname`*[O: StaticLayoutImageRef](img: O): `returntype` {.inline, noSideEffect, raises: [].} =
+      ## Static image channel layout variant of `procname`.
+      `inner`(O.L)
 
 
-proc channelCount*[O: StaticLayoutImageRef](img: O):
-             range[1..MAX_IMAGE_CHANNELS] {.inline, noSideEffect, raises: [].} =
-  O.L.len
+staticDynamicImageGetter(channelLayoutLen, range[1..MAX_IMAGE_CHANNELS], len)
+staticDynamicImageGetter(channelLayoutName, string, name)
+staticDynamicImageGetter(channels, ChannelNameArray, channels)
+
+{.deprecated: [channelCount: channelLayoutLen].}
 
 
 proc width*[O: ImageObjectRef](img: O): int {.inline, noSideEffect.} =
+  let shape = img.data.shape
   case img.order:
-    of OrderPlanar: img.data[^1]
-    of OrderInterleaved: img.data[^2]
+    of OrderPlanar: shape[^1]
+    of OrderInterleaved: shape[^2]
 
 
 proc height*[O: ImageObjectRef](img: O): int {.inline, noSideEffect.} =
+  let shape = img.data.shape
   case img.order:
-    of OrderPlanar: img.data[^2]
-    of OrderInterleaved: img.data[^3]
+    of OrderPlanar: shape[^2]
+    of OrderInterleaved: shape[^3]
 
 
 proc planar*[O: ImageObjectRef](image: O): O {.noSideEffect, inline.} =

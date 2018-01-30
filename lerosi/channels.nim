@@ -57,22 +57,22 @@ var
   channelLayoutChannelsSeq = newSeq[ChannelNameArray]()
 
 
-proc emptyChannelNames*(): ChannelNameArray {.inline, raises: [].} =
+proc emptyChannelNames*(): ChannelNameArray {.noSideEffect, inline, raises: [].} =
   result.len = 0
 
-proc `$`*(layout_id: ChannelLayoutId): string {.inline, raises: [].} =
+proc `$`*(layout_id: ChannelLayoutId): string {.noSideEffect, inline, raises: [].} =
   ["ChannelLayout(", $(layout_id.int), ")"].join
 
-proc name*(layout_id: ChannelLayoutId): string {.inline.} =
+proc name*(layout_id: ChannelLayoutId): string {.noSideEffect, inline.} =
   channelLayoutNameSeq[layout_id.int]
 
-proc len*(layout_id: ChannelLayoutId): int {.inline.} =
+proc len*(layout_id: ChannelLayoutId): int {.noSideEffect, inline.} =
   channelLayoutChannelsSeq[layout_id.int].len
 
-proc channels*(layout_id: ChannelLayoutId): ChannelNameArray {.inline.} =
+proc channels*(layout_id: ChannelLayoutId): ChannelNameArray {.noSideEffect, inline.} =
   channelLayoutChannelsSeq[layout_id.int]
 
-proc channel*(layout_id: ChannelLayoutId, name: string): int {.inline.} =
+proc channel*(layout_id: ChannelLayoutId, name: string): int {.noSideEffect, inline.} =
   channelLayoutChannelsSeq[layout_id.int].find(name)
 
 
