@@ -22,6 +22,7 @@ task tests, "Running all tests":
   exec "echo 'Tests complete, see '`cat tmp_filename`' for full results. Generating PDF...'"
   exec "wgmkpdf 'LERoSI Module Unit Tests' \"`cat tmp_filename`\"  \"`cat tmp_filename`.pdf\" || echo 'Failed to generate PDF from test results!'"
   echo "done."
+  exec "xdg-open \"`cat tmp_filename`.pdf\""
   exec "rm tmp_filename"
 
 task bench, "Running benchmarks":
@@ -36,6 +37,7 @@ task bench, "Running benchmarks":
   echo "Generating PDF..."
   exec "wgmkpdf 'LERoSI Module Benchmark Results' \"`cat tmp_filename`\"  \"`cat tmp_filename`.pdf\" || echo 'Failed to generate PDF from benchmark results!'"
   echo "done."
+  exec "xdg-open \"`cat tmp_filename`.pdf\""
   exec "rm tmp_filename"
 
 before install:
