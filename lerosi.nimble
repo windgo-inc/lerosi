@@ -12,7 +12,7 @@ requires "arraymancer >= 0.2.90"
 requires "imghdr >= 1.0"
 requires "nimpng >= 0.2.0"
 
-skipDirs = @["test", "bootstrap"]
+skipDirs = @["test"]
 
 task tests, "Running all tests":
   exec "echo 'test/results/'`date +%Y%m%d-%H.%M.%S`'.test.txt' > tmp_filename"
@@ -38,10 +38,6 @@ task bench, "Running benchmarks":
   echo "done."
   exec "rm tmp_filename"
 
-task generate, "Generating driver tables":
-  exec "sh bootstrap.sh"
-
 before install:
-  echo "Bootstrapping..."
-  exec "sh bootstrap.sh && echo 'done.' || echo 'failed!'"
+  echo "Nothing to do before install, proceeding."
 
