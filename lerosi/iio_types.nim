@@ -86,13 +86,19 @@ proc newStaticLayoutImageRaw*[T; L: ChannelLayout](data: seq[T];
   newStaticLayoutImageRaw[T](data.toTensor, order)
 
 
-proc clone*[O: DynamicLayoutImageRef](img: O): O {.noSideEffect, inline.} =
+proc shallowCopy*[O: DynamicLayoutImageRef](img: O): O {.noSideEffect, inline.} =
   O(data: img.data, lid: img.layoutId, order: img.order)
 
 
-proc clone*[O: StaticLayoutImageRef](img: O): O {.noSideEffect, inline.} =
+proc shallowCopy*[O: StaticLayoutImageRef](img: O): O {.noSideEffect, inline.} =
   O(data: img.data, order: img.order)
 
+
+# Renamed clone to shallowCopy because clone is not really a semantically
+# correct name in the intuitive sense. A clone implies everything is
+# duplicated, when in fact only the top level object fields are copied,
+# and the data are not.
+{.deprecated: [clone: shallowCopy].}
 
 proc layoutId*[ImgT: DynamicLayoutImageRef](img: ImgT):
               ChannelLayoutId {.noSideEffect, inline, raises: [].} =
@@ -142,7 +148,7 @@ proc height*[O: ImageObjectRef](img: O): int {.inline, noSideEffect.} =
 
 proc planar*[O: ImageObjectRef](image: O): O {.noSideEffect, inline.} =
   if image.order == OrderInterleaved:
-    result = image.clone()
+    result = image.shallowCopy
     result.data = image.data.to_chw().asContiguous()
   else:
     result = image
@@ -150,7 +156,7 @@ proc planar*[O: ImageObjectRef](image: O): O {.noSideEffect, inline.} =
 
 proc interleaved*[O: ImageObjectRef](image: O): O {.noSideEffect, inline.} =
   if image.order == OrderPlanar:
-    result = image.clone()
+    result = image.shallowCopy
     result.data = image.data.to_hwc().asContiguous()
   else:
     result = image
