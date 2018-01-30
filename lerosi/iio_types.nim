@@ -20,14 +20,136 @@ type
 
   ImageData*[T] = openarray[T] or AnyTensor[T]
 
-  ImageObject*[T] = ref object
-    layout: ChannelLayoutId
-    order: ImageDataOrdering
-    data: Tensor[T]
+  ImageObject*[T] = object of RootObj
+    order*: ImageDataOrdering
+    data*: Tensor[T]
 
-  StaticLayoutImageObject*[T; L: ChannelLayout] = ref object
-    order: ImageDataOrdering
-    data: Tensor[T]
+  ImageObjectRef*[T] = ref ImageObject[T]
+
+  DynamicLayoutImage*[T] = ref object of ImageObject[T]
+    lid: ChannelLayoutId
+
+  StaticLayoutImage*[T; L: ChannelLayout] = ref object of ImageObject[T]
 
   IIOError* = object of Exception
+
+
+
+proc newDynamicLayoutImage*[T](w, h: int; lid: ChannelLayoutId;
+                        order: ImageDataOrdering = OrderPlanar):
+                        DynamicLayoutImage[T] {.noSideEffect, inline.} =
+  let data: Tensor[T] =
+    if order == OrderPlanar:
+      newTensorUninit[T]([lid.len, h, w])
+    else:
+      newTensorUninit[T]([h, w, lid.len])
+
+  result = DynamicLayoutImage[T](data: data, lid: lid, order: order)
+
+
+proc newStaticLayoutImage*[T; L: ChannelLayout](w, h: int;
+                        order: ImageDataOrdering = OrderPlanar):
+                        StaticLayoutImage[T, L] {.noSideEffect, inline.} =
+  let data: Tensor[T] =
+    if order == OrderPlanar:
+      newTensorUninit[T]([L.len, h, w])
+    else:
+      newTensorUninit[T]([h, w, L.len])
+
+  result = StaticLayoutImage[T, L](data: data, order: order)
+
+
+proc newDynamicLayoutImageRaw*[T](data: Tensor[T]; lid: ChannelLayoutId;
+                           order: ImageDataOrdering):
+                           DynamicLayoutImage[T] {.noSideEffect, inline.} =
+  DynamicLayoutImage[T](data: data, lid: lid, order: order)
+
+
+proc newDynamicLayoutImageRaw*[T](data: seq[T]; lid: ChannelLayoutId;
+                           order: ImageDataOrdering):
+                           DynamicLayoutImage[T] {.noSideEffect, inline.} =
+  newDynamicLayoutImageRaw[T](data.toTensor, lid, order)
+
+
+proc newStaticLayoutImageRaw*[T; L: ChannelLayout](data: Tensor[T];
+                           order: ImageDataOrdering):
+                           StaticLayoutImage[T, L] {.noSideEffect, inline.} =
+  StaticLayoutImage[T](data: data, order: order)
+
+
+proc newStaticLayoutImageRaw*[T; L: ChannelLayout](data: seq[T];
+                           order: ImageDataOrdering):
+                           StaticLayoutImage[T, L] {.noSideEffect, inline.} =
+  newStaticLayoutImageRaw[T](data.toTensor, order)
+
+
+proc clone*[O: DynamicLayoutImage](img: O): O {.noSideEffect, inline.} =
+  O(data: img.data, lid: img.layoutId, order: img.order)
+
+
+proc clone*[O: StaticLayoutImage](img: O): O {.noSideEffect, inline.} =
+  O(data: img.data, order: img.order)
+
+
+proc layoutId*[ImgT: DynamicLayoutImage](img: ImgT):
+              ChannelLayoutId {.noSideEffect, inline, raises: [].} =
+  img.lid
+
+proc layoutId*[ImgT: StaticLayoutImage](img: ImgT):
+              ChannelLayoutId {.noSideEffect, inline, raises: [].} =
+  ImgT.L.id
+
+
+# We only have implicit conversions to dynamic layout images. Conversion to
+# static layout must be explicit or else the user could unknowingly introduce
+# unwanted colorspace conversions.
+converter toDynamicLayoutImage*[O: StaticLayoutImage](img: O):
+  DynamicLayoutImage[O.T] {.inline, raises: [].} =
+
+  DynamicLayoutImage[O.T](data: img.data, lid: img.layoutId, order: img.order)
+
+
+template to_chw[T](data: Tensor[T]): Tensor[T] =
+  ## Convert the storage shape of the image from H⨯W⨯C → C⨯H⨯W.
+  data.permute(2, 0, 1)
+
+
+template to_hwc[T](data: Tensor[T]): Tensor[T] =
+  ## Convert the storage shape of the image from C⨯H⨯W → H⨯W⨯C.
+  data.permute(1, 2, 0)
+
+
+proc channels*[O: ImageObjectRef](img: O): int {.inline, noSideEffect.} =
+  case img.order:
+    of OrderPlanar: img.data[^3]
+    of OrderInterleaved: img.data[^1]
+
+
+proc width*[O: ImageObjectRef](img: O): int {.inline, noSideEffect.} =
+  case img.order:
+    of OrderPlanar: img.data[^1]
+    of OrderInterleaved: img.data[^2]
+
+
+proc height*[O: ImageObjectRef](img: O): int {.inline, noSideEffect.} =
+  case img.order:
+    of OrderPlanar: img.data[^2]
+    of OrderInterleaved: img.data[^3]
+
+
+proc planar*[O: ImageObjectRef](image: O): O {.noSideEffect, inline.} =
+  if image.order == OrderInterleaved:
+    result = image.clone()
+    result.data = image.data.to_chw().asContiguous()
+  else:
+    result = image
+
+
+proc interleaved*[O: ImageObjectRef](image: O): O {.noSideEffect, inline.} =
+  if image.order == OrderPlanar:
+    result = image.clone()
+    result.data = image.data.to_hwc().asContiguous()
+  else:
+    result = image
+
 

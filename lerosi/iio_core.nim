@@ -29,34 +29,6 @@ proc imageio_check_format*[T](data: openarray[T]): ImageType =
   testImage(header)
 
 
-proc channels*[T](img: ImageObject[T]): int {.inline, noSideEffect.} =
-  case img.order:
-    of OrderPlanar: img.data[^3]
-    of OrderInterleaved: img.data[^1]
-
-
-proc width*[T](img: ImageObject[T]): int {.inline, noSideEffect.} =
-  case img.order:
-    of OrderPlanar: img.data[^1]
-    of OrderInterleaved: img.data[^2]
-
-
-proc height*[T](img: ImageObject[T]): int {.inline, noSideEffect.} =
-  case img.order:
-    of OrderPlanar: img.data[^2]
-    of OrderInterleaved: img.data[^3]
-
-
-template to_chw*[T](img: Tensor[T]): Tensor[T] =
-  ## Convert the storage shape of the image from H⨯W⨯C → C⨯H⨯W.
-  img.permute(2, 0, 1)
-
-
-template to_hwc*[T](img: Tensor[T]): Tensor[T] =
-  ## Convert the storage shape of the image from C⨯H⨯W → H⨯W⨯C.
-  img.permute(1, 2, 0)
-
-
 template imageio_load_core*(resource: untyped): Tensor[byte] =
   ## Load an image from a file or memory
   block:
