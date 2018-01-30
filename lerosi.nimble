@@ -18,10 +18,12 @@ task tests, "Running all tests":
   exec "echo 'test/results/'`date +%Y%m%d-%H.%M.%S`'.test.txt' > tmp_filename"
   exec "cd test && nim c --stackTrace:on test_all"
   exec "mkdir -p test/results"
-  exec "test/test_all > `cat tmp_filename` || echo 'Test(s) failed, see results!'"
+  # Pass the results through tty tee and then a color codes stripper that goes to the file.
+  exec "test/test_all | tee /dev/tty | sed -r \"s/\\x1B\\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g\" > `cat tmp_filename` || echo 'Test(s) failed, see results!'"
   exec "echo 'Tests complete, see '`cat tmp_filename`' for full results. Generating PDF...'"
   exec "wgmkpdf 'LERoSI Module Unit Tests' \"`cat tmp_filename`\"  \"`cat tmp_filename`.pdf\" || echo 'Failed to generate PDF from test results!'"
   echo "done."
+  # Open the results.
   exec "xdg-open \"`cat tmp_filename`.pdf\""
   exec "rm tmp_filename"
 
@@ -29,7 +31,8 @@ task bench, "Running benchmarks":
   exec "echo 'test/results/'`date +%Y%m%d-%H.%M.%S`'.benchmark.txt' > tmp_filename"
   exec "nim c -d:release test/bench_all"
   exec "mkdir -p test/results"
-  exec "test/bench_all > `cat tmp_filename`"
+  # Pass the results through tty tee and then a color codes stripper that goes to the file.
+  exec "test/bench_all | tee /dev/tty | sed -r \"s/\\x1B\\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g\" > `cat tmp_filename`"
   echo "Benchmark Results:"
   echo "============================================================"
   exec "cat `cat tmp_filename`"
@@ -37,6 +40,7 @@ task bench, "Running benchmarks":
   echo "Generating PDF..."
   exec "wgmkpdf 'LERoSI Module Benchmark Results' \"`cat tmp_filename`\"  \"`cat tmp_filename`.pdf\" || echo 'Failed to generate PDF from benchmark results!'"
   echo "done."
+  # Open the results.
   exec "xdg-open \"`cat tmp_filename`.pdf\""
   exec "rm tmp_filename"
 
