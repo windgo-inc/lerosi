@@ -137,9 +137,7 @@ proc declareChannelLayoutImpl*(nameNode: NimNode): NimNode {.compileTime.} =
   let
     name = nodeToStr(nameNode)
     givenname = "ChLayout" & name
-
     layoutIdent = ident(givenname)
-
     (channelNameDefs, chanMeta) = channelMappingGen(name)
 
   var chans: ChannelIdArray
@@ -176,7 +174,6 @@ proc declareChannelLayoutImpl*(nameNode: NimNode): NimNode {.compileTime.} =
   for i, x in pairs(chanMeta):
     let
       (name, ch) = x
-    
       nameIdent = ident("Ch" & name)
       idIdent = ident("ChId" & name)
       #nameLit = newStrLitNode(name)
@@ -255,67 +252,13 @@ declareChannelGroups(
 
 
 proc cmpChannels*(a: typedesc, b: typedesc): ChannelIndexArray {.noSideEffect, inline, raises: [].} =
-  for name in b.channels:
-    result.add(find(a.channels, name))
+  for ch_id in b.channels:
+    result.add(find(a.channels, ch_id))
 
 
 proc cmpChannels*(a: ChannelLayoutId, b: ChannelLayoutId): ChannelIndexArray {.noSideEffect, inline.} =
   for name in b.channels:
-    result.add(find(a.channels, name))
+    result.add(find(a.channels, ch_id))
 
 
-when isMainModule:
-  template doRGBAProcs(what: untyped): untyped =
-    echo what.name, ".ChR = ", what.ChR, " ", what.name, ".channel(\"R\") = ", what.channel("R")
-    echo what.name, ".ChG = ", what.ChG, " ", what.name, ".channel(\"G\") = ", what.channel("G")
-    echo what.name, ".ChB = ", what.ChB, " ", what.name, ".channel(\"B\") = ", what.channel("B")
-    echo what.name, ".ChA = ", what.ChA, " ", what.name, ".channel(\"A\") = ", what.channel("A")
-
-  template doYCbCrProcs(what: untyped): untyped =
-    echo what.name, ".ChY  = ", what.ChY,  " ", what.name, ".channel(\"Y\")  = ", what.channel("Y")
-    echo what.name, ".ChCb = ", what.ChCb, " ", what.name, ".channel(\"Cb\") = ", what.channel("Cb")
-    echo what.name, ".ChCr = ", what.ChCr, " ", what.name, ".channel(\"Cr\") = ", what.channel("Cr")
-
-  template doCmpChannelsTest(nam: untyped, a: untyped, b: untyped): untyped =
-    echo "cmpChannels(", nam(a), ", ", nam(b), ") = ", cmpChannels(a, b)
-
-  static:
-    echo "*** COMPILE TIME TESTS ***"
-    template doTest(layoutType: typedesc, body: untyped): untyped =
-      echo "Testing ", layoutType.name, " (static type):"
-      echo layoutType.name, ".id = ", layoutType.id
-      echo layoutType.name, ".len = ", layoutType.len
-      echo layoutType.name, ".channels = ", @(layoutType.channels)
-      body
-    
-    doTest(ChLayoutRGBA): doRGBAProcs(ChLayoutRGBA)
-    doTest(ChLayoutBGRA): doRGBAProcs(ChLayoutBGRA)
-
-    doTest(ChLayoutYCbCr): doYCbCrProcs(ChLayoutYCbCr)
-    doTest(ChLayoutYCrCb): doYCbCrProcs(ChLayoutYCrCb)
-
-    echo " ~ cmpChannels ~"
-    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutRGBA)
-    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutARGB)
-    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutRGB)
-    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutBGRA)
-    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutABGR)
-    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutBGR)
-
-  echo "*** RUN TIME TESTS ***"
-  let myLayouts = [ChLayoutRGBA.id, ChLayoutBGRA.id, ChLayoutYCbCr.id, ChLayoutYCrCb.id]
-  for i, layout in myLayouts:
-    echo "Testing ", layout.name, " ", layout, ":"
-    echo layout.name, ".len = ", layout.len
-    echo layout.name, ".channels = ", @(layout.channels)
-    if i > 1: doYCbCrProcs(layout) else: doRGBAProcs(layout)
-
-  echo " ~ cmpChannels ~"
-  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutRGBA.id)
-  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutARGB.id)
-  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutRGB.id)
-  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutBGRA.id)
-  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutABGR.id)
-  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutBGR.id)
-    
 
