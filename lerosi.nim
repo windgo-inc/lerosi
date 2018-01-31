@@ -6,8 +6,9 @@ import lerosi/iio_core
 import lerosi/iio_base
 import lerosi/fixedseq
 import lerosi/channels
+import lerosi/colorspace
 
-export channels, iio_types, iio_base
+export channels, colorspace, iio_types, iio_base
 
 # TODO: Full rework.
 # Public interface begin

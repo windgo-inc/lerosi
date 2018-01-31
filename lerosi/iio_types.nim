@@ -47,7 +47,7 @@ proc newDynamicLayoutImage*[T](w, h: int; lid: ChannelLayoutId;
     else:
       newTensorUninit[T]([h, w, lid.len])
 
-  result = DynamicLayoutImage[T](data: data, lid: lid, order: order)
+  result = DynamicLayoutImageRef[T](data: data, lid: lid, order: order)
 
 
 proc newStaticLayoutImage*[T; L: ChannelLayout](w, h: int;
@@ -59,7 +59,7 @@ proc newStaticLayoutImage*[T; L: ChannelLayout](w, h: int;
     else:
       newTensorUninit[T]([h, w, L.len])
 
-  result = StaticLayoutImage[T, L](data: data, order: order)
+  result = StaticLayoutImageRef[T, L](data: data, order: order)
 
 
 proc newDynamicLayoutImageRaw*[T](data: Tensor[T]; lid: ChannelLayoutId;
@@ -164,6 +164,7 @@ proc planar*[O: ImageObjectRef](image: O): O {.noSideEffect, inline.} =
   if image.order == OrderInterleaved:
     result = image.shallowCopy
     result.data = image.data.to_chw().asContiguous()
+    result.order = OrderPlanar
   else:
     result = image
 
@@ -172,7 +173,16 @@ proc interleaved*[O: ImageObjectRef](image: O): O {.noSideEffect, inline.} =
   if image.order == OrderPlanar:
     result = image.shallowCopy
     result.data = image.data.to_hwc().asContiguous()
+    result.order = OrderInterleaved
   else:
     result = image
+
+proc setOrdering*[O: ImageObjectRef](image: var O, e: ImageDataOrdering) {.noSideEffect, inline.} =
+  if not (image.order == e):
+    image.order = e
+    if e == OrderPlanar:
+      image.data = image.data.to_chw().asContiguous()
+    else:
+      image.data = image.data.to_hwc().asContiguous()
 
 

@@ -98,61 +98,52 @@ suite "Group of tests":
     echo "Write JPEG from JPEG: ", mypicjpeg.writeImage("test/samplejpeg-out.jpeg", SaveOptions(format: JPEG, quality: 100))
 
     echo "Success!"
-  
-# These tests need to be reworked to use ChannelIds rather than string channel
-# names.
 
-#when isMainModule:
-#  template doRGBAProcs(what: untyped): untyped =
-#    echo what.name, ".ChR = ", what.ChR, " ", what.name, ".channel(\"R\") = ", what.channel("R")
-#    echo what.name, ".ChG = ", what.ChG, " ", what.name, ".channel(\"G\") = ", what.channel("G")
-#    echo what.name, ".ChB = ", what.ChB, " ", what.name, ".channel(\"B\") = ", what.channel("B")
-#    echo what.name, ".ChA = ", what.ChA, " ", what.name, ".channel(\"A\") = ", what.channel("A")
-#
-#  template doYCbCrProcs(what: untyped): untyped =
-#    echo what.name, ".ChY  = ", what.ChY,  " ", what.name, ".channel(\"Y\")  = ", what.channel("Y")
-#    echo what.name, ".ChCb = ", what.ChCb, " ", what.name, ".channel(\"Cb\") = ", what.channel("Cb")
-#    echo what.name, ".ChCr = ", what.ChCr, " ", what.name, ".channel(\"Cr\") = ", what.channel("Cr")
-#
-#  template doCmpChannelsTest(nam: untyped, a: untyped, b: untyped): untyped =
-#    echo "cmpChannels(", nam(a), ", ", nam(b), ") = ", cmpChannels(a, b)
-#
-#  static:
-#    echo "*** COMPILE TIME TESTS ***"
-#    template doTest(layoutType: typedesc, body: untyped): untyped =
-#      echo "Testing ", layoutType.name, " (static type):"
-#      echo layoutType.name, ".id = ", layoutType.id
-#      echo layoutType.name, ".len = ", layoutType.len
-#      echo layoutType.name, ".channels = ", @(layoutType.channels)
-#      body
-#    
-#    doTest(ChLayoutRGBA): doRGBAProcs(ChLayoutRGBA)
-#    doTest(ChLayoutBGRA): doRGBAProcs(ChLayoutBGRA)
-#
-#    doTest(ChLayoutYCbCr): doYCbCrProcs(ChLayoutYCbCr)
-#    doTest(ChLayoutYCrCb): doYCbCrProcs(ChLayoutYCrCb)
-#
-#    echo " ~ cmpChannels ~"
-#    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutRGBA)
-#    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutARGB)
-#    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutRGB)
-#    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutBGRA)
-#    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutABGR)
-#    doCmpChannelsTest(name, ChLayoutRGBA, ChLayoutBGR)
-#
-#  echo "*** RUN TIME TESTS ***"
-#  let myLayouts = [ChLayoutRGBA.id, ChLayoutBGRA.id, ChLayoutYCbCr.id, ChLayoutYCrCb.id]
-#  for i, layout in myLayouts:
-#    echo "Testing ", layout.name, " ", layout, ":"
-#    echo layout.name, ".len = ", layout.len
-#    echo layout.name, ".channels = ", @(layout.channels)
-#    if i > 1: doYCbCrProcs(layout) else: doRGBAProcs(layout)
-#
-#  echo " ~ cmpChannels ~"
-#  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutRGBA.id)
-#  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutARGB.id)
-#  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutRGB.id)
-#  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutBGRA.id)
-#  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutABGR.id)
-#  doCmpChannelsTest(name, ChLayoutRGBA.id, ChLayoutBGR.id)
+  test "Channels and channel layout properties":
+    template doRGBAProcs(what: untyped): untyped =
+      echo what, ".ChR = ", what.ChR, " and ", what, ".channel(ChIdR) = ", what.channel(ChIdR)
+      echo what, ".ChG = ", what.ChG, " and ", what, ".channel(ChIdG) = ", what.channel(ChIdG)
+      echo what, ".ChB = ", what.ChB, " and ", what, ".channel(ChIdB) = ", what.channel(ChIdB)
+      echo what, ".ChA = ", what.ChA, " and ", what, ".channel(ChIdA) = ", what.channel(ChIdA)
+
+    template doYCbCrProcs(what: untyped): untyped =
+      echo what, ".ChY  = ", what.ChY,  " and ", what, ".channel(ChIdY)  = ", what.channel(ChIdY)
+      echo what, ".ChCb = ", what.ChCb, " and ", what, ".channel(ChIdCb) = ", what.channel(ChIdCb)
+      echo what, ".ChCr = ", what.ChCr, " and ", what, ".channel(ChIdCr) = ", what.channel(ChIdCr)
+
+    template doCmpChannelsTest(a, b: untyped): untyped =
+      echo "cmpChannels(", a, ", ", b, ") = ", cmpChannels(a, b)
+
+    let
+      myLayouts = [
+        ChLayoutRGBA.id, ChLayoutBGRA.id,
+        ChLayoutYCbCr.id, ChLayoutYCrCb.id
+      ]
+
+    for i, layout in myLayouts:
+      echo "Testing ", layout, ":"
+      echo layout, ".len = ", layout.len
+      echo layout, ".channels = ", layout.channels
+      if i > 1: doYCbCrProcs(layout) else: doRGBAProcs(layout)
+
+    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutRGBA.id)
+    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutARGB.id)
+    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutRGB.id)
+    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGRA.id)
+    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutABGR.id)
+    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGR.id)
+
+  test "Copy channels":
+    let planarpic = readImage[byte]("test/sample.bmp").planar
+    let interleavedpic = planarpic.interleaved
+
+    var planaroutpic = newDynamicLayoutImage[byte](planarpic.width, planarpic.height, ChLayoutBGR.id).planar
+    var interleavedoutpic = planaroutpic.interleaved
+
+    planarpic.copyChannelsTo(planaroutpic)
+    interleavedpic.copyChannelsTo(interleavedoutpic)
+
+    check planaroutpic.writeImage("test/redbluereverse-planar.bmp", SaveOptions(format: BMP))
+    check interleavedoutpic.writeImage("test/redbluereverse-interleaved.bmp", SaveOptions(format: BMP))
+
     
