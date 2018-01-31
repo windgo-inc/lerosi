@@ -5,6 +5,7 @@ import ./iio_types
 import ./iio_core
 import ./fixedseq
 import ./channels
+#import ./colorspace
 
 const
   loaded_channel_layouts = [

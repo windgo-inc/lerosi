@@ -141,7 +141,7 @@ macro staticDynamicImageGetter(procname: untyped, returntype: untyped, inner: un
 
 staticDynamicImageGetter(channelLayoutLen, range[1..MAX_IMAGE_CHANNELS], len)
 staticDynamicImageGetter(channelLayoutName, string, name)
-staticDynamicImageGetter(channels, ChannelNameArray, channels)
+staticDynamicImageGetter(channels, ChannelIdArray, channels)
 
 {.deprecated: [channelCount: channelLayoutLen].}
 

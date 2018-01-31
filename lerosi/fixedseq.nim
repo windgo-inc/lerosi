@@ -37,7 +37,7 @@ proc copyFrom*(a: var FixedSeq, s: FixedSeq) {.inline.} =
   for i in 0..<s.len:
     a.data[i] = s.data[i]
 
-proc setLen*[A: FixedSeq](a: var FixedSeq, len: Natural) {.inline.} =
+proc setLen*[A: FixedSeq](a: var A, len: Natural) {.inline.} =
   when compileOption("boundChecks"):
     assert len <= A.N
   a.len = len
