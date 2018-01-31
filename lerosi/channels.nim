@@ -251,14 +251,14 @@ declareChannelGroups(
 )
 
 
-proc cmpChannels*(a: typedesc, b: typedesc): ChannelIndexArray {.noSideEffect, inline, raises: [].} =
-  for ch_id in b.channels:
-    result.add(find(a.channels, ch_id))
+template cmpChannels*(a, b: untyped): ChannelIndexArray =
+  block:
+    var res: ChannelIndexArray
+    res.setLen(0)
+    for ch_id in b.channels:
+      res.add(find(a.channels, ch_id))
 
-
-proc cmpChannels*(a: ChannelLayoutId, b: ChannelLayoutId): ChannelIndexArray {.noSideEffect, inline.} =
-  for name in b.channels:
-    result.add(find(a.channels, ch_id))
+    res
 
 
 
