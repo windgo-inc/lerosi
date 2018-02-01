@@ -143,7 +143,13 @@ suite "Group of tests":
     planarpic.copyChannelsTo(planaroutpic)
     interleavedpic.copyChannelsTo(interleavedoutpic)
 
-    check planaroutpic.writeImage("test/redbluereverse-planar.bmp", SaveOptions(format: BMP))
-    check interleavedoutpic.writeImage("test/redbluereverse-interleaved.bmp", SaveOptions(format: BMP))
+    check planaroutpic.writeImage("test/redbluereverse-planar2planar.bmp", SaveOptions(format: BMP))
+    check interleavedoutpic.writeImage("test/redbluereverse-interleaved2interleaved.bmp", SaveOptions(format: BMP))
+
+    planarpic.copyChannelsTo(interleavedoutpic)
+    interleavedpic.copyChannelsTo(planaroutpic)
+
+    check planaroutpic.writeImage("test/redbluereverse-interleaved2planar.bmp", SaveOptions(format: BMP))
+    check interleavedoutpic.writeImage("test/redbluereverse-planar2interleaved.bmp", SaveOptions(format: BMP))
 
     

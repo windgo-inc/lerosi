@@ -18,7 +18,7 @@
 # purpose, it seemed appropriate to generalize further.
 
 
-import system, sequtils
+import system, sequtils, future
 
 
 type FixedSeq*[T; N: static[Natural]] = object
@@ -149,6 +149,20 @@ proc reversed*(a: FixedSeq, result: var FixedSeq) {.inline.} =
   for i in a.len..<result.len:
     result[i] = 0
   result.len = a.len
+
+proc applyFilter*[A: FixedSeq](a: A, f: proc (item: A.T): bool) {.inline.} =
+  var offset: int = 0
+  for i in 0..<a.len:
+    if f(a[i + offset]):
+      a[i + offset] = a[i]
+    else:
+      dec(offset)
+  a.setLen(a.len + offset)
+
+proc filter*[A: FixedSeq](a: A, f: proc (item: A.T): bool): A {.inline.} =
+  for i in 0..<a.len:
+    if f(a[i]):
+      result.add(a[i])
 
 proc `==`*[A: FixedSeq](a: A, s: openarray[A.T]): bool {.inline.} =
   if a.len != s.len:
