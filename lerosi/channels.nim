@@ -1,6 +1,7 @@
 import os, system, macros, future
 import strutils, sequtils, sets, tables, algorithm
 import ./fixedseq
+import ./macroutil
 
 
 # Per Ratsimbazafy's observation that the cache line of an x86_64 machine can
@@ -41,23 +42,13 @@ var
   channelIdCounter {.compileTime.} = 0
   channelIdTable {.compileTime.} = initTable[string, int]()
 
+  staticChannelLayoutNameSeq {.compileTime.} = newSeq[string]()
+  staticChannelNameSeq {.compileTime.} = newSeq[string]()
+
   channelLayoutNameSeq = newSeq[string]()
   channelNameSeq = newSeq[string]()
 
   channelLayoutChannelsSeq = newSeq[ChannelIdArray]()
-
-iterator capitalTokenIter(str: string): string =
-  var acc = newStringOfCap(str.len)
-
-  for i, ch in pairs(str):
-    if isUpperAscii(ch) and not acc.isNilOrEmpty:
-      yield acc
-      acc.setLen(0)
-    acc.add(ch)
-
-  # make sure to get the last one too
-  if not acc.isNilOrEmpty:
-    yield acc
 
 
 iterator channelInfoGen(layout_str: string): (string, int, bool) =
@@ -72,13 +63,6 @@ iterator channelInfoGen(layout_str: string): (string, int, bool) =
     yield (s, channelIdTable[s], is_new)
 
 
-# Old interface
-proc capitalTokens(str: string): seq[string] {.compileTime, deprecated.} =
-  result = newSeqOfCap[string](str.len)
-  for tok in capitalTokenIter(str):
-    result.add(tok)
-
-
 proc channelMappingGen(layout_str: string): (NimNode, seq[(string, int)]) {.compileTime.} =
   var nameidseq = newSeqOfCap[(string, int)](layout_str.len)
   var stmts = newNimNode(nnkStmtList)
@@ -88,25 +72,22 @@ proc channelMappingGen(layout_str: string): (NimNode, seq[(string, int)]) {.comp
 
     if is_new:
       stmts.add(newCall(bindSym"add", [bindSym"channelNameSeq", newStrLitNode("ChId" & name)]))
+      staticChannelNameSeq.add("ChId" & name)
 
   result = (stmts, nameidseq)
-
-
-proc nodeToStr(node: NimNode): string {.compileTime.} =
-  case node.kind:
-    of nnkIdent:
-      result = $node
-    of nnkStrLit, nnkRStrLit:
-      result = node.strVal
-    else:
-      quit "Expected identifier or string as channel layout specifier, but got " & $node & "."
-  
+ 
 
 proc emptyChannelIds*(): ChannelIdArray {.noSideEffect, inline, raises: [].} =
   result.len = 0
 
+proc staticName*(layout_id: ChannelLayoutId): string {.compileTime.} =
+  staticChannelLayoutNameSeq[layout_id.int]
+
 proc name*(layout_id: ChannelLayoutId): string {.noSideEffect, inline.} =
   channelLayoutNameSeq[layout_id.int]
+
+proc staticName*(ch_id: ChannelId): string {.compileTime.} =
+  staticChannelNameSeq[ch_id.int]
 
 proc name*(ch_id: ChannelId): string {.noSideEffect, inline.} =
   channelNameSeq[ch_id.int]
@@ -123,11 +104,10 @@ proc channel*(layout_id: ChannelLayoutId, chid: ChannelId): int {.noSideEffect, 
 
 proc `$`*(layout_id: ChannelLayoutId): string {.noSideEffect, inline.} =
   # ["ChannelLayout(", $(layout_id.int), ")"].join
-  layout_id.name
+  $(layout_id.int) & ".ChannelLayoutId"
 
-proc `$`*(ch_id: ChannelId): string {.noSideEffect, inline.} =
-  # ["Channel(", $(ch_id.int), ")"].join
-  ch_id.name
+proc `$`*(ch_id: ChannelId): string = # {.noSideEffect, inline.} =
+  $(ch_id.int) & ".ChannelId"
 
 
 proc declareChannelLayoutImpl*(nameNode: NimNode): NimNode {.compileTime.} =
@@ -140,8 +120,7 @@ proc declareChannelLayoutImpl*(nameNode: NimNode): NimNode {.compileTime.} =
     layoutIdent = ident(givenname)
     (channelNameDefs, chanMeta) = channelMappingGen(name)
 
-  var chans: ChannelIdArray
-  chans.setLen(0)
+  var chans = newSeqOfCap[ChannelId](chanMeta.len)
   for name, ch in items(chanMeta):
     chans.add(ch.ChannelId)
 
@@ -149,6 +128,9 @@ proc declareChannelLayoutImpl*(nameNode: NimNode): NimNode {.compileTime.} =
     nCh = chans.len
     maxCh = chans.len - 1
 
+  var chanIdArr = newNimNode(nnkBracket).add(newDotExpr(newIntLitNode(chans[0].int), bindSym"ChannelId"))
+  for i in 1..maxCh:
+    chanIdArr.add(newDotExpr(newIntLitNode(chans[i].int), bindSym"ChannelId"))
 
   # Declare compile time inline procedures for fetching channel layout
   # properties.
@@ -159,12 +141,20 @@ proc declareChannelLayoutImpl*(nameNode: NimNode): NimNode {.compileTime.} =
     proc id*(layout: typedesc[`layoutIdent`]): ChannelLayoutId {.noSideEffect, inline, raises: [].} = ChannelLayoutId(`id`)
     proc len*(layout: typedesc[`layoutIdent`]): Natural {.noSideEffect, inline, raises: [].} = `nCh`
     proc name*(layout: typedesc[`layoutIdent`]): string {.noSideEffect, inline, raises: [].} = `givenname`
-    proc channels*(layout: typedesc[`layoutIdent`]): ChannelIdArray {.noSideEffect, inline, raises: [].} = `chans`
+      #for x in `chans`: result.add(ChannelId(x))
+    #proc channels*(layout: typedesc[`layoutIdent`]): array[0..`maxCh`, ChannelId] {.noSideEffect, inline, raises: [].} = `chans`
     proc channel*(layout: typedesc[`layoutIdent`], chid: ChannelId): int {.noSideEffect, inline, raises: [].} = find(`chans`, chid)
 
-  # Add the runtime channel layout table insertion code.
 
+  var
+    chan_call = newStmtList(newCall(bindSym"copyFrom", [ident"result", chanIdArr]))
+    chan_proc = quote do:
+      proc channels*(layout: typedesc[`layoutIdent`]):
+        ChannelIdArray {.noSideEffect, inline, raises: [].} = `chan_call`
+
+  # Add the runtime channel layout table insertion code.
   channelNameDefs.copyChildrenTo(result)
+  chan_proc.copyChildrenTo(result)
 
   result.add(newCall(bindSym"add", [ident"channelLayoutNameSeq", newStrLitNode(givenname)]))
   result.add(newCall(bindSym"add", [ident"channelLayoutChannelsSeq", newCall(bindSym"emptyChannelIds", [])]))
@@ -249,16 +239,5 @@ declareChannelGroups(
   "Y",      # Luminance
   "Yp"      # Luma
 )
-
-
-template cmpChannels*(a, b: untyped): ChannelIndexArray =
-  block:
-    var res: ChannelIndexArray
-    res.setLen(0)
-    for ch_id in b.channels:
-      res.add(find(a.channels, ch_id))
-
-    res
-
 
 

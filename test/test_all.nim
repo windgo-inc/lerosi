@@ -1,8 +1,9 @@
 import system, unittest, macros, math
-import typetraits
+import typetraits, sequtils
 
 import lerosi
 import lerosi/iio_core
+import lerosi/iio_types
 
 suite "Group of tests":
   test "Image I/O (Internal)":
@@ -132,6 +133,33 @@ suite "Group of tests":
     doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGRA.id)
     doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutABGR.id)
     doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGR.id)
+
+  test "Compare channels":
+    let pic1 = newStaticLayoutImage[byte, ChLayoutYpCbCr](5, 5)
+    let pic2 = newStaticLayoutImage[byte, ChLayoutAYpCbCr](5, 5)
+    let pic3 = newDynamicLayoutImage[byte](5, 5, ChLayoutRGBA)
+
+    static:
+      for j, i in cmpChannels(ChLayoutYpCbCr, ChLayoutAYpCbCr):
+        echo "j, i = ", j, ", ", i
+
+    for j, i in cmpChannels(pic1, pic2):
+      echo "j, i = ", j, ", ", i
+    
+    #echo type(pic1).name, " and ", type(pic2).name
+    #for j, i in cmpChannels(pic1, pic2):
+    #  echo "j, i = ", j, ", ", i
+
+    #for y in 
+    #echo type(pic2), " and ", type(pic3)
+    #for j, i in cmpChannels(pic2, pic3): echo "j, i = ", j, ", ", i
+    #echo type(pic1), " and ", type(pic3)
+    #for j, i in cmpChannels(pic1, pic3): echo "j, i = ", j, ", ", i
+  
+  test "Colorspace":
+    #expandMacros:
+
+    RGB2BGR(ChLayoutRGB, "R")
 
   test "Copy channels":
     let planarpic = readImage[byte]("test/sample.bmp").planar

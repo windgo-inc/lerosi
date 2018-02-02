@@ -27,6 +27,11 @@ type FixedSeq*[T; N: static[Natural]] = object
     len*: Natural
 
 
+#proc copyFrom*[A: FixedSeq](a: var A, s: openarray[A.T]) {.inline.} =
+#  a.len = s.len
+#  for i in 0..<s.len:
+#    a.data[i] = s[i]
+
 proc copyFrom*[A: FixedSeq](a: var A, s: varargs[A.T]) {.inline.} =
   a.len = s.len
   for i in 0..<s.len:
@@ -100,6 +105,8 @@ proc `@`*[A: FixedSeq](a: A): seq[A.T] {.inline.} =
   result = newSeq[A.T](a.len)
   for i in 0..<a.len:
     result[i] = a.data[i]
+
+proc toSeq[A: FixedSeq](a: A): seq[A.T] {.inline.} = @(a)
 
 proc `$`*(a: FixedSeq): string {.inline.} =
   result = "["

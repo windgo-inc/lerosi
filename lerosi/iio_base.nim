@@ -31,13 +31,13 @@ proc wrap_stbi_loadedlayout(channels: int):
 
 proc readImage*[T: SomeNumber](filename: string): DynamicLayoutImageRef[T] =
   let data = filename.imageio_load_core()
-  newDynamicLayoutImageRaw[T](data.asType(T),
+  newDynamicLayoutImage[T](data.asType(T),
     data.shape[^1].wrap_stbi_loadedlayout(),
     OrderInterleaved)
 
 proc readHdrImage*[T: SomeReal](filename: string): DynamicLayoutImageRef[T] =
   let data = filename.imageio_load_hdr_core()
-  newDynamicLayoutImageRaw[T](data.asType(T),
+  newDynamicLayoutImage[T](data.asType(T),
     data.shape[^1].wrap_stbi_loadedlayout(),
     OrderInterleaved)
 

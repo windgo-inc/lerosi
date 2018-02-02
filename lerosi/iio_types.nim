@@ -1,5 +1,5 @@
 import macros
-import system, arraymancer
+import system, arraymancer, sequtils, strutils
 import ./channels
 import ./img_permute
 
@@ -30,14 +30,39 @@ type
   DynamicLayoutImage*[T] = object of ImageObject[T]
     lid: ChannelLayoutId
 
-  StaticLayoutImage*[T; L: ChannelLayout] = object of ImageObject[T]
+  StaticLayoutImage*[T; L] = object of ImageObject[T]
 
   DynamicLayoutImageRef*[T] = ref DynamicLayoutImage[T]
-  StaticLayoutImageRef*[T; L: ChannelLayout] = ref StaticLayoutImage[T, L]
+  StaticLayoutImageRef*[T; L] = ref StaticLayoutImage[T, L]
 
   IIOError* = object of Exception
 
 
+template channelSource*(u: untyped): untyped =
+  when u is StaticLayoutImageRef:
+    u.L.channels()
+  elif u is DynamicLayoutImageRef:
+    u.layoutId().channels()
+  else:
+    u.channels()
+
+template cmpChannelsImpl(a, b: untyped): untyped =
+  block:
+    var res: ChannelIndexArray
+    res.len = 0
+    for ch_id in b.channelSource:
+      res.add(find(a.channelSource, ch_id))
+
+    res
+
+template cmpChannelsStatic(a, b: untyped): untyped =
+  cmpChannelsImpl(type(a).L, type(b).L)
+
+template cmpChannels*(a, b: untyped): untyped =
+  when a is StaticLayoutImageRef and b is StaticLayoutImageRef:
+    cmpChannelsStatic(a, b)
+  else:
+    cmpChannelsImpl(a, b)
 
 proc newDynamicLayoutImage*[T](w, h: int; lid: ChannelLayoutId;
                         order: ImageDataOrdering = OrderPlanar):
@@ -48,43 +73,59 @@ proc newDynamicLayoutImage*[T](w, h: int; lid: ChannelLayoutId;
     else:
       newTensorUninit[T]([h, w, lid.len])
 
-  result = DynamicLayoutImageRef[T](data: data, lid: lid, order: order)
+  new(result)
+  result[] = DynamicLayoutImage[T](data: data, lid: lid, order: order)
 
 
-proc newStaticLayoutImage*[T; L: ChannelLayout](w, h: int;
+proc newDynamicLayoutImage*[T](w, h: int; layout: typedesc[`ChannelLayout`];
+                        order: ImageDataOrdering = OrderPlanar):
+                        DynamicLayoutImageRef[T] {.noSideEffect, inline.} =
+  newDynamicLayoutImage[T](w, h, layout.id, order)
+
+
+proc newStaticLayoutImage*[T; L](w, h: int;
                         order: ImageDataOrdering = OrderPlanar):
                         StaticLayoutImageRef[T, L] {.noSideEffect, inline.} =
   let data: Tensor[T] =
     if order == OrderPlanar:
-      newTensorUninit[T]([L.len, h, w])
+      newTensorUninit[T](int(L.len), h, w)
     else:
-      newTensorUninit[T]([h, w, L.len])
+      newTensorUninit[T](h, w, int(L.len))
 
-  result = StaticLayoutImageRef[T, L](data: data, order: order)
+  new(result)
+  result[] = StaticLayoutImage[T, L](data: data, order: order)
 
 
-proc newDynamicLayoutImageRaw*[T](data: Tensor[T]; lid: ChannelLayoutId;
+proc newDynamicLayoutImage*[T](data: Tensor[T]; lid: ChannelLayoutId;
                            order: ImageDataOrdering):
                            DynamicLayoutImageRef[T] {.noSideEffect, inline.} =
-  DynamicLayoutImageRef[T](data: data, lid: lid, order: order)
+
+  new(result)
+  result[] = DynamicLayoutImage[T](data: data, lid: lid, order: order)
 
 
-proc newDynamicLayoutImageRaw*[T](data: seq[T]; lid: ChannelLayoutId;
+proc newDynamicLayoutImage*[T](data: seq[T]; lid: ChannelLayoutId;
                            order: ImageDataOrdering):
                            DynamicLayoutImageRef[T] {.noSideEffect, inline.} =
-  newDynamicLayoutImageRaw[T](data.toTensor, lid, order)
+
+  new(result)
+  result[] = DynamicLayoutImage[T](data: data.toTensor, lid: lid, order: order)
 
 
-proc newStaticLayoutImageRaw*[T; L: ChannelLayout](data: Tensor[T];
+proc newStaticLayoutImage*[T; L: ChannelLayout](data: Tensor[T];
                            order: ImageDataOrdering):
                            StaticLayoutImageRef[T, L] {.noSideEffect, inline.} =
-  StaticLayoutImageRef[T](data: data, order: order)
+
+  new(result)
+  result[] = StaticLayoutImage[T, L](data: data, order: order)
 
 
-proc newStaticLayoutImageRaw*[T; L: ChannelLayout](data: seq[T];
+proc newStaticLayoutImage*[T; L: ChannelLayout](data: seq[T];
                            order: ImageDataOrdering):
                            StaticLayoutImageRef[T, L] {.noSideEffect, inline.} =
-  newStaticLayoutImageRaw[T](data.toTensor, order)
+
+  new(result)
+  result[] = StaticLayoutImage[T, L](data: data.toTensor, order: order)
 
 
 proc shallowCopy*[O: DynamicLayoutImageRef](img: O): O {.noSideEffect, inline.} =
