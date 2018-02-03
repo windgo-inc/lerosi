@@ -21,10 +21,14 @@
 import system, sequtils, future
 
 
-type FixedSeq*[T; N: static[Natural]] = object
+type FixedSeq*[T; N: static[int]] = object
     ## Custom stack allocated array that behaves like seq.
     data*: array[N, T]
-    len*: Natural
+    len*: int
+
+
+proc initFixedSeq*[T; N: static[int]](): FixedSeq[T, N] {.inline.} =
+  result.len = 0
 
 
 proc copyFrom*[A: FixedSeq](a: var A, s: varargs[A.T]) {.inline.} =
@@ -37,7 +41,7 @@ proc copyFrom*(a: var FixedSeq, s: FixedSeq) {.inline.} =
   for i in 0..<s.len:
     a.data[i] = s.data[i]
 
-proc setLen*[A: FixedSeq](a: var A, len: Natural) {.inline.} =
+proc setLen*[A: FixedSeq](a: var A, len: int) {.inline.} =
   when compileOption("boundChecks"):
     assert len <= A.N
   a.len = len
@@ -101,6 +105,9 @@ proc `@`*[A: FixedSeq](a: A): seq[A.T] {.inline.} =
   for i in 0..<a.len:
     result[i] = a.data[i]
 
+# William Whitacre 2018/02/01
+proc toSeq*[A: FixedSeq](a: A): seq[A.T] {.inline.} = @a
+
 proc `$`*(a: FixedSeq): string {.inline.} =
   result = "["
   var firstElement = true
@@ -112,20 +119,23 @@ proc `$`*(a: FixedSeq): string {.inline.} =
 
 # Removed product procedure.
 
-proc insert*[A: FixedSeq](a: var A, value: A.T, index: Natural = 0) {.inline.} =
+proc insert*[A: FixedSeq](a: var A, value: A.T, index: int = 0) {.inline.} =
   for i in countdown(a.len, index+1):
-    a[i] = a[i-1]
-  a[index] = value
+    a.data[i] = a.data[i-1]
+  a.data[index] = value
   inc a.len
 
-proc delete*(a: var FixedSeq, index: Natural) {.inline.} =
+proc delete*(a: var FixedSeq, index: int) {.inline.} =
   dec(a.len)
   for i in index..<a.len:
-    a[i] = a[i+1]
-  a[a.len] = 0
+    a.data[i] = a.data[i+1]
+  when a.T is string:
+    a.data[a.len] = ""
+  elif a.T is SomeNumber:
+    a.data[a.len] = A.T(0)
 
 proc add*[A: FixedSeq](a: var A, value: A.T) {.inline.} =
-  a[a.len] = value
+  a.data[a.len] = value
   inc a.len
 
 proc `&`*[A: FixedSeq](a: A, value: A.T): A {.inline.} =
@@ -198,4 +208,11 @@ proc concat*[A: FixedSeq](dsas: varargs[A]): A =
     for val in dsa:
       result[i] = val
       inc(i)
+
+# William Whitacre 2018/02/02
+proc join*[A: FixedSeq](fixseq: A, x: string = ""): string =
+  result = ""
+  for i in 0..<fixseq.len:
+    result.add $(fixseq[i])
+
 
