@@ -64,11 +64,13 @@ proc `colorspace=`*(img: var SomeImage, cspace: ColorSpace) {.imageMutator.} =
 proc init_image(img: var SomeImage, dim: varargs[range[1..high(int)]])
     {.imageMutator.} =
 
+  let nchans = img.colorspace().colorspace_len
+
   case img.storage_order:
   of DataPlanar:
-    img.dat = newTensorUninit[T]([lid.len] & dim)
+    img.dat = newTensorUninit[T]([nchans] & dim)
   of DataInterleaved:
-    img.dat = newTensorUninit[T](dim & [lid.len])
+    img.dat = newTensorUninit[T](dim & [nchans])
 
 
 when isMainModule:

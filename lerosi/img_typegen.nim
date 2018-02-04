@@ -200,8 +200,10 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
     skip = true
     first = true
     csenums = ""
-    csidcases = newNimNode(nnkCaseStmt).add(ident"cs")
-    csnamecases = newNimNode(nnkCaseStmt).add(ident"cs")
+    csidcases = nnkCaseStmt.newTree(ident"cs")
+    csnamecases = nnkCaseStmt.newTree(ident"cs")
+    cschancases = nnkCaseStmt.newTree(ident"cs")
+    cschanlencases = nnkCaseStmt.newTree(ident"cs")
 
   for csid, name in colorspaceNames:
     if skip:
@@ -237,6 +239,7 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
 
       chk.copyChildrenTo(channelChecks)
 
+    let channelSetLen = newLit(channelSet.len)
     let st = quote do:
       type `typ`* = distinct int
 
@@ -250,6 +253,8 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
         ColorSpace {.inline, noSideEffect, raises: [].} = `idident`
       proc colorspace_channels*(T: typedesc[`typ`]):
         set[ColorChannel] {.inline, noSideEffect, raises: [].} = `channelSet`
+      proc colorspace_len*(T: typedesc[`typ`]):
+        int {.inline, noSideEffect, raises: [].} = `channelSetLen`
       proc colorspace_has_channel*(T: typedesc[`typ`], ch: ColorChannel):
           bool {.inline, noSideEffect, raises: [].} =
         colorspace_channels(T).contains(ch)
@@ -263,8 +268,22 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
     st.copyChildrenTo(stmts)
     channelChecks.copyChildrenTo(stmts)
 
-    csidcases.add(newNimNode(nnkOfBranch).add(newLit(name), newAssignment(ident"result", idident)))
-    csnamecases.add(newNimNode(nnkOfBranch).add(idident, newAssignment(ident"result", newLit(name))))
+    csidcases.add(nnkOfBranch.newTree(
+      newLit(name),
+      newAssignment(ident"result", idident)
+    ))
+    csnamecases.add(nnkOfBranch.newTree(
+      idident,
+      newAssignment(ident"result", newLit(name))
+    ))
+    cschancases.add(nnkOfBranch.newTree(
+      idident,
+      newAssignment(ident"result", channelSet)
+    ))
+    cschanlencases.add(nnkOfBranch.newTree(
+      idident,
+      newAssignment(ident"result", channelSetLen)
+    ))
 
     if first:
       first = false
@@ -319,14 +338,31 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
     newIdentDefs(ident"cs", ident"ColorSpace")
   ])
 
+  var chanproc = newProc(ident"colorspace_channels", [
+    nnkBracketExpr.newTree(ident"set", ident"ColorChannel"),
+    newIdentDefs(ident"cs", ident"ColorSpace")
+  ])
+
+  var chanlenproc = newProc(ident"colorspace_len", [
+    ident"int",
+    newIdentDefs(ident"cs", ident"ColorSpace")
+  ])
+
   idproc.body = newStmtList(csidcases)
   idproc.pragma = getterPragma(newNimNode(nnkBracket).add(ident"ValueError"))
 
   nameproc.body = newStmtList(csnamecases)
-  nameProc.pragma = getterPragma()
+  chanproc.body = newStmtList(cschancases)
+  chanlenproc.body = newStmtList(cschanlencases)
+
+  nameproc.pragma = getterPragma()
+  chanproc.pragma = getterPragma()
+  chanlenproc.pragma = getterPragma()
 
   result.add idproc
   result.add nameproc
+  result.add chanproc
+  result.add chanlenproc
 
   addendum.copyChildrenTo(result)
 
