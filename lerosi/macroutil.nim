@@ -24,7 +24,7 @@ iterator capitalTokenIter*(str: string): string =
     yield acc
 
 
-proc capitalTokens*(str: string): seq[string] {.compileTime, deprecated.} =
+proc capitalTokens*(str: string): seq[string] {.compileTime.} =
   result = newSeqOfCap[string](str.len)
   for tok in capitalTokenIter(str):
     result.add(tok)

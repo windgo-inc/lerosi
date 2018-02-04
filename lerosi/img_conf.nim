@@ -30,6 +30,11 @@ type
 # Type generating macros are kept seperately.
 include ./img_typegen
 
+proc initChannelIndex*(dat: openarray[int]): ChannelIndex {.inline.} =
+  result.setLen(dat.len)
+  for i in 0..<dat.len:
+    result[i] = dat[i]
+
 # Meta colorspace specifying runtime configuration of colorspaces.
 defineWildcardColorSpace"Any"
 

@@ -22,9 +22,9 @@ import system, sequtils, future
 
 
 type FixedSeq*[T; N: static[int]] = object
-    ## Custom stack allocated array that behaves like seq.
-    data*: array[N, T]
-    len*: int
+  ## Custom stack allocated array that behaves like seq.
+  data*: array[N, T]
+  len*: int
 
 
 proc initFixedSeq*[T; N: static[int]](): FixedSeq[T, N] {.inline.} =

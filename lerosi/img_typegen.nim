@@ -328,22 +328,22 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
     proc colorspace_name*(cs: string):
       string {.inline, noSideEffect, raises: [].} = cs
 
-  var idproc = newProc(ident"colorspace_id", [
+  var idproc = newProc(nnkPostfix.newTree(ident"*", ident"colorspace_id"), [
     ident"ColorSpace",
     newIdentDefs(ident"cs", ident"string")
   ])
 
-  var nameproc = newProc(ident"colorspace_name", [
+  var nameproc = newProc(nnkPostfix.newTree(ident"*", ident"colorspace_name"), [
     ident"string",
     newIdentDefs(ident"cs", ident"ColorSpace")
   ])
 
-  var chanproc = newProc(ident"colorspace_channels", [
+  var chanproc = newProc(nnkPostfix.newTree(ident"*", ident"colorspace_channels"), [
     nnkBracketExpr.newTree(ident"set", ident"ColorChannel"),
     newIdentDefs(ident"cs", ident"ColorSpace")
   ])
 
-  var chanlenproc = newProc(ident"colorspace_len", [
+  var chanlenproc = newProc(nnkPostfix.newTree(ident"*", ident"colorspace_len"), [
     ident"int",
     newIdentDefs(ident"cs", ident"ColorSpace")
   ])
@@ -370,7 +370,6 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
 proc makeColorSpaceRefs(): NimNode {.compileTime.} =
   var
     skip = true
-    first = true
     chspacecases = newNimNode(nnkCaseStmt).add(ident"ch")
 
   for chid, name in channelNames:
@@ -379,7 +378,6 @@ proc makeColorSpaceRefs(): NimNode {.compileTime.} =
       continue
 
     let
-      chtyp = ident("ChType" & name)
       chident = ident("ChId" & name)
 
     let csidseq = channelColorspaces[chid]
@@ -388,7 +386,6 @@ proc makeColorSpaceRefs(): NimNode {.compileTime.} =
     for k, csid in csidseq:
       let
         csname = colorspaceNames[csid]
-        cstyp = ident("ColorSpaceType" & csname)
         csident = ident("ColorSpaceId" & csname)
 
       csset.add(csident)

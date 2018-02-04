@@ -8,12 +8,10 @@ import ./img_conf
 
 type
   StaticOrderImage*[T; S; O: static[DataOrder]] = object
-    ind: ChannelIndex
     dat: Tensor[T]
     cspace: ColorSpace
 
   DynamicOrderImage*[T; S] = object
-    ind: ChannelIndex
     dat: Tensor[T]
     cspace: ColorSpace
     order: DataOrder
@@ -29,25 +27,34 @@ macro imageGetter*(targetProc: untyped): untyped =
 macro imageMutator*(targetProc: untyped): untyped =
   result = imageAccessor(targetProc, true)
 
-proc inplaceSwizzle(img: var SomeImage, ind: ChannelIndex) {.imageMutator.} =
-  discard
+proc data*(img: SomeImage): auto {.imageGetter.} = img.dat
 
 proc inplaceReorder(img: var SomeImage, order: DataOrder) {.imageMutator.} =
   discard
-
-proc index*(img: SomeImage): ChannelIndex {.imageGetter.} =
-  img.ind
 
 proc storage_order*(img: SomeImage): DataOrder {.imageGetter.} =
   when isStaticTarget: O else: img.order
 
 proc colorspace*(img: SomeImage): ColorSpace {.imageGetter.} =
-  when not (S is ColorSpaceAnyType): S.colorspace_id
+  when not (S is ColorSpaceTypeAny): S.colorspace_id
   else: img.cspace
 
-proc `index=`*(img: var SomeImage, ind: ChannelIndex) {.imageMutator.} =
-  img.inplaceSwizzle(ind)
-  img.ind = ind
+template is_static_ordered*[T: StaticOrderImage](img: T): bool = true
+template is_static_ordered*[T: DynamicOrderImage](img: T): bool = false
+
+template is_dynamic_ordered*[T: StaticOrderImage](img: T): bool = false
+template is_dynamic_ordered*[T: DynamicOrderImage](img: T): bool = true
+
+template has_static_colorspace*[T; S; O: static[DataOrder]](
+    img: StaticOrderImage[T, S, O]): bool =
+
+  when not (S is ColorSpaceTypeAny): true else: false
+
+template has_static_colorspace*[T; S](img: DynamicOrderImage[T, S]): bool =
+  when not (S is ColorSpaceTypeAny): true else: false
+
+template has_dynamic_colorspace*(img: untyped): untyped =
+  (not has_static_colorspace(img))
 
 proc `storage_order=`*(img: var DynamicOrderImage, order: DataOrder)
     {.inline, raises: [].} =
@@ -55,26 +62,61 @@ proc `storage_order=`*(img: var DynamicOrderImage, order: DataOrder)
   img.order = order
 
 proc `colorspace=`*(img: var SomeImage, cspace: ColorSpace) {.imageMutator.} =
-  when not (S is ColorSpaceAnyType):
+  when not (S is ColorSpaceTypeAny):
     raise newException(Exception,
       "Cannot set the colorspace on a static colorspace object.")
   else:
     img.cspace = cspace
 
-proc init_image(img: var SomeImage, dim: varargs[range[1..high(int)]])
+proc init_image_storage(img: var SomeImage,
+    cspace: ColorSpace = ColorSpaceIdAny,
+    # cspace argument has no effect on static colorspace images.
+    order: DataOrder = DataPlanar,
+    # order argument has no effect on static ordered images.
+    dim: openarray[int] = [1])
     {.imageMutator.} =
 
-  let nchans = img.colorspace().colorspace_len
+  let
+    nchans = colorspace_len(
+      when has_static_colorspace(img): img.S
+      else: cspace)
+
+  when is_dynamic_ordered(img):
+    img.order = order
+ 
+  when has_dynamic_colorspace(img):
+    img.cspace = cspace
 
   case img.storage_order:
   of DataPlanar:
-    img.dat = newTensorUninit[T]([nchans] & dim)
+    img.dat = newTensorUninit[T]([nchans].toMetadataArray & dim.toMetadataArray)
   of DataInterleaved:
-    img.dat = newTensorUninit[T](dim & [nchans])
+    img.dat = newTensorUninit[T](dim.toMetadataArray & [nchans].toMetadataArray)
 
 
 when isMainModule:
   import typetraits
+
+  template image_init_test(T: untyped; order, cspace: untyped): untyped =
+    var img: T
+    echo " : init_image_storage on type ", T.name
+    init_image_storage(img, cspace, order, dim=[6, 6])
+    echo "img.storage_order = ", img.storage_order
+    echo "img.colorspace = ", img.colorspace
+    echo "img.data.shape = ", img.data.shape
+    echo "img.data = ", img.data
+
+  template statictype_image_init_test(T, S, O: untyped): untyped =
+    image_init_test(StaticOrderImage[T, ColorSpaceTypeAny, O], O, colorspace_id(S))
+
+  template dynamictype_image_init_test(T, S, O: untyped): untyped =
+    image_init_test(DynamicOrderImage[T, ColorSpaceTypeAny], O, colorspace_id(S))
+
+  template statictype_scs_image_init_test(T, S, O: untyped): untyped =
+    image_init_test(StaticOrderImage[T, S, O], O, colorspace_id(S))
+
+  template dynamictype_scs_image_init_test(T, S, O: untyped): untyped =
+    image_init_test(DynamicOrderImage[T, S], O, colorspace_id(S))
 
   template has_subspace_test(sp1, sp2, expect: untyped): untyped =
     echo $(sp1), ".colorspace_has_subspace(", $(sp2), ") = ", sp1.colorspace_has_subspace(sp2)
@@ -85,47 +127,45 @@ when isMainModule:
 
 
   template image_statictype_test(datatype, cspace, order: untyped): untyped =
-    var myImg: StaticOrderImage[datatype, cspace, order]
-    echo type(myImg).name, " :"
-    echo "  T = ", type(myImg.T).name
-    echo "  S = ", type(myImg.S).name
-    echo "  O = ", type(myImg.O).name
+    var img: StaticOrderImage[datatype, cspace, order]
+    echo type(img).name, " :"
+    echo "  T = ", type(img.T).name
+    echo "  S = ", type(img.S).name
+    echo "  O = ", $(img.O)
 
-    when cspace is ColorSpaceAnyType:
-      echo "do: myImg.colorspace = ", ColorSpaceIdYpCbCr
-      myImg.colorspace = ColorSpaceIdYpCbCr
+    when cspace is ColorSpaceTypeAny:
+      echo "do: img.colorspace = ", ColorSpaceIdYpCbCr
+      img.colorspace = ColorSpaceIdYpCbCr
       echo "{OK} assignment over dynamic colorspace succeeded expectedly."
     else:
       try:
-        myImg.colorspace = ColorSpaceIdYpCbCr
+        img.colorspace = ColorSpaceIdYpCbCr
       except:
         echo "{OK} assignment over static colorspace failed expectedly."
 
-    echo "myImg.storage_order = ", myImg.storage_order
-    echo "myImg.colorspace = ", myImg.colorspace
-    echo "myImg.index = ", myImg.index
+    echo "img.storage_order = ", img.storage_order
+    echo "img.colorspace = ", img.colorspace
 
 
   template image_dynamictype_test(datatype, cspace, order: untyped): untyped =
-    var myImg: DynamicOrderImage[datatype, cspace]
-    echo type(myImg).name, " :"
-    echo "  T = ", type(myImg.T).name
-    echo "  S = ", type(myImg.S).name
+    var img: DynamicOrderImage[datatype, cspace]
+    echo type(img).name, " :"
+    echo "  T = ", type(img.T).name
+    echo "  S = ", type(img.S).name
 
-    when cspace is ColorSpaceAnyType:
-      echo "do: myImg.colorspace = ", ColorSpaceIdYpCbCr
-      myImg.colorspace = ColorSpaceIdYpCbCr
+    when cspace is ColorSpaceTypeAny:
+      echo "do: img.colorspace = ", ColorSpaceIdYpCbCr
+      img.colorspace = ColorSpaceIdYpCbCr
       echo "{OK} assignment over dynamic colorspace succeeded expectedly."
     else:
       try:
-        myImg.colorspace = ColorSpaceIdYpCbCr
+        img.colorspace = ColorSpaceIdYpCbCr
       except:
         echo "{OK} assignment over static colorspace failed expectedly."
 
-    myImg.storage_order = order
-    echo "myImg.storage_order = ", myImg.storage_order
-    echo "myImg.colorspace = ", myImg.colorspace
-    echo "myImg.index = ", myImg.index
+    img.storage_order = order
+    echo "img.storage_order = ", img.storage_order
+    echo "img.colorspace = ", img.colorspace
 
   template image_statictype_test_il(datatype, cspace: untyped): untyped =
     image_statictype_test(datatype, cspace, DataInterleaved)
@@ -149,32 +189,78 @@ when isMainModule:
     has_subspace_test(ColorSpaceTypeRGB, ColorSpaceTypeRBA, false)
 
   static:
-    echo " ~ Compile-time Test ~"
+    echo " *** compile-time tests ***"
+
+    echo " ~ subcolorspace inclusion test ~"
     has_subspace_test_suite()
 
+    echo " ~ StaticOrderImage compile-time access tests ~"
     image_statictype_test_il(byte, ColorSpaceTypeRGB)
     image_statictype_test_pl(byte, ColorSpaceTypeRGB)
     image_statictype_test_il(byte, ColorSpaceTypeCMYe)
     image_statictype_test_pl(byte, ColorSpaceTypeCMYe)
-    image_statictype_test_il(byte, ColorSpaceAnyType)
-    image_statictype_test_pl(byte, ColorSpaceAnyType)
+    image_statictype_test_il(byte, ColorSpaceTypeAny)
+    image_statictype_test_pl(byte, ColorSpaceTypeAny)
 
-  echo " ~ Run-time Test ~"
+    echo " ~ DynamicOrderImage compile-time access tests ~"
+    image_dynamictype_test_il(byte, ColorSpaceTypeRGB)
+    image_dynamictype_test_pl(byte, ColorSpaceTypeRGB)
+    image_dynamictype_test_il(byte, ColorSpaceTypeCMYe)
+    image_dynamictype_test_pl(byte, ColorSpaceTypeCMYe)
+    image_dynamictype_test_il(byte, ColorSpaceTypeAny)
+    image_dynamictype_test_pl(byte, ColorSpaceTypeAny)
+
+  echo " ~ run-time tests ~"
   has_subspace_test_suite()
 
+  echo " ~ StaticOrderImage run-time access tests ~"
   image_statictype_test_il(byte, ColorSpaceTypeRGB)
   image_statictype_test_pl(byte, ColorSpaceTypeRGB)
   image_statictype_test_il(byte, ColorSpaceTypeCMYe)
   image_statictype_test_pl(byte, ColorSpaceTypeCMYe)
-  image_statictype_test_il(byte, ColorSpaceAnyType)
-  image_statictype_test_pl(byte, ColorSpaceAnyType)
+  image_statictype_test_il(byte, ColorSpaceTypeAny)
+  image_statictype_test_pl(byte, ColorSpaceTypeAny)
 
+  echo " ~ DynamicOrderImage run-time access tests ~"
   image_dynamictype_test_il(byte, ColorSpaceTypeRGB)
   image_dynamictype_test_pl(byte, ColorSpaceTypeRGB)
   image_dynamictype_test_il(byte, ColorSpaceTypeCMYe)
   image_dynamictype_test_pl(byte, ColorSpaceTypeCMYe)
-  image_dynamictype_test_il(byte, ColorSpaceAnyType)
-  image_dynamictype_test_pl(byte, ColorSpaceAnyType)
+  image_dynamictype_test_il(byte, ColorSpaceTypeAny)
+  image_dynamictype_test_pl(byte, ColorSpaceTypeAny)
+
+  echo " ~ StaticOrderImage initialization (dynamic colorspace) ~"
+  statictype_image_init_test(byte, ColorSpaceTypeRGB, DataPlanar)
+  statictype_image_init_test(byte, ColorSpaceTypeRGB, DataInterleaved)
+  statictype_image_init_test(byte, ColorSpaceTypeCMYe, DataPlanar)
+  statictype_image_init_test(byte, ColorSpaceTypeCMYe, DataInterleaved)
+  statictype_image_init_test(byte, ColorSpaceTypeYpCbCr, DataPlanar)
+  statictype_image_init_test(byte, ColorSpaceTypeYpCbCr, DataInterleaved)
+
+  echo " ~ DynamicOrderImage initialization (dynamic colorspace) ~"
+  dynamictype_image_init_test(byte, ColorSpaceTypeRGB, DataPlanar)
+  dynamictype_image_init_test(byte, ColorSpaceTypeRGB, DataInterleaved)
+  dynamictype_image_init_test(byte, ColorSpaceTypeCMYe, DataPlanar)
+  dynamictype_image_init_test(byte, ColorSpaceTypeCMYe, DataInterleaved)
+  dynamictype_image_init_test(byte, ColorSpaceTypeYpCbCr, DataPlanar)
+  dynamictype_image_init_test(byte, ColorSpaceTypeYpCbCr, DataInterleaved)
+
+  echo " ~ StaticOrderImage initialization (static colorspace) ~"
+  statictype_scs_image_init_test(byte, ColorSpaceTypeRGB, DataPlanar)
+  statictype_scs_image_init_test(byte, ColorSpaceTypeRGB, DataInterleaved)
+  statictype_scs_image_init_test(byte, ColorSpaceTypeCMYe, DataPlanar)
+  statictype_scs_image_init_test(byte, ColorSpaceTypeCMYe, DataInterleaved)
+  statictype_scs_image_init_test(byte, ColorSpaceTypeYpCbCr, DataPlanar)
+  statictype_scs_image_init_test(byte, ColorSpaceTypeYpCbCr, DataInterleaved)
+
+  echo " ~ DynamicOrderImage initialization (static colorspace) ~"
+  dynamictype_scs_image_init_test(byte, ColorSpaceTypeRGB, DataPlanar)
+  dynamictype_scs_image_init_test(byte, ColorSpaceTypeRGB, DataInterleaved)
+  dynamictype_scs_image_init_test(byte, ColorSpaceTypeCMYe, DataPlanar)
+  dynamictype_scs_image_init_test(byte, ColorSpaceTypeCMYe, DataInterleaved)
+  dynamictype_scs_image_init_test(byte, ColorSpaceTypeYpCbCr, DataPlanar)
+  dynamictype_scs_image_init_test(byte, ColorSpaceTypeYpCbCr, DataInterleaved)
+
 
 #proc newDynamicLayoutImage*[T](w, h: int; lid: ChannelLayoutId;
 #                        order: DataOrder = DataPlanar):

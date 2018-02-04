@@ -2,10 +2,6 @@
 proc imageAccessor(targetProc: NimNode, allowMutableImages: bool):
     NimNode {.compileTime.} =
 
-  let
-    targetParams = targetProc.params
-    targetGenericParams = targetProc[2]
-
   var
     staticBody = newStmtList()
     dynamicBody = newStmtList()
@@ -15,9 +11,6 @@ proc imageAccessor(targetProc: NimNode, allowMutableImages: bool):
   dynamicBody.add(parseStmt"const isStaticTarget = false")
   targetBody.copyChildrenTo(staticBody)
   targetBody.copyChildrenTo(dynamicBody)
-
-  template genparam_or_new(gparam: untyped): untyped =
-    if gparam.kind == nnkEmpty: nnkGenericParams.newTree else: gparam.copy
 
   var
     staticParams = targetProc.params.copy
