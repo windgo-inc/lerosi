@@ -63,11 +63,10 @@ suite "Group of tests":
   test "Image LDR I/O (User)":
     let mypic = readImage[byte]("test/sample.png")
     echo "Properties of 'test/sample.png':"
-    echo "  channelLayoutLen:  ", mypic.channelLayoutLen
-    echo "  channelLayoutName: ", mypic.channelLayoutName
-    echo "  channels:          ", mypic.channels
-    echo "  width:             ", mypic.width
-    echo "  height:            ", mypic.height
+    echo "  storage_order: ", mypic.storage_order
+    echo "  colorspace:    ", mypic.colorspace
+    echo "  width:         ", mypic.width
+    echo "  height:        ", mypic.height
 
     echo "Write BMP from PNG: ", mypic.writeImage("test/samplepng-out.bmp", SaveOptions(format: BMP))
     echo "Write PNG from PNG: ", mypic.writeImage("test/samplepng-out.png", SaveOptions(format: PNG, stride: 0))
@@ -75,11 +74,10 @@ suite "Group of tests":
 
     let mypic2 = readImage[byte]("test/samplepng-out.bmp")
     echo "Properties of 'test/samplepng-out.bmp':"
-    echo "  channelLayoutLen:  ", mypic2.channelLayoutLen
-    echo "  channelLayoutName: ", mypic2.channelLayoutName
-    echo "  channels:          ", mypic2.channels
-    echo "  width:             ", mypic2.width
-    echo "  height:            ", mypic2.height
+    echo "  storage_order: ", mypic2.storage_order
+    echo "  colorspace:    ", mypic2.colorspace
+    echo "  width:         ", mypic2.width
+    echo "  height:        ", mypic2.height
 
     echo "Write BMP from BMP: ", mypic2.writeImage("test/samplebmp-out.bmp", SaveOptions(format: BMP))
     echo "Write PNG from BMP: ", mypic2.writeImage("test/samplebmp-out.png", SaveOptions(format: PNG, stride: 0))
@@ -87,11 +85,10 @@ suite "Group of tests":
 
     let mypicjpeg = readImage[byte]("test/samplepng-out.jpeg")
     echo "Properties of 'test/samplepng-out.jpeg':"
-    echo "  channelLayoutLen:  ", mypicjpeg.channelLayoutLen
-    echo "  channelLayoutName: ", mypicjpeg.channelLayoutName
-    echo "  channels:          ", mypicjpeg.channels
-    echo "  width:             ", mypicjpeg.width
-    echo "  height:            ", mypicjpeg.height
+    echo "  storage_order: ", mypicjpeg.storage_order
+    echo "  colorspace:    ", mypicjpeg.colorspace
+    echo "  width:         ", mypicjpeg.width
+    echo "  height:        ", mypicjpeg.height
 
     echo "Write BMP from JPEG: ", mypicjpeg.writeImage("test/samplejpeg-out.bmp", SaveOptions(format: BMP))
     echo "Write PNG from JPEG: ", mypicjpeg.writeImage("test/samplejpeg-out.png", SaveOptions(format: PNG, stride: 0))
@@ -99,57 +96,57 @@ suite "Group of tests":
 
     echo "Success!"
 
-  test "Channels and channel layout properties":
-    template doRGBAProcs(what: untyped): untyped =
-      echo what, ".ChR = ", what.ChR, " and ", what, ".channel(ChIdR) = ", what.channel(ChIdR)
-      echo what, ".ChG = ", what.ChG, " and ", what, ".channel(ChIdG) = ", what.channel(ChIdG)
-      echo what, ".ChB = ", what.ChB, " and ", what, ".channel(ChIdB) = ", what.channel(ChIdB)
-      echo what, ".ChA = ", what.ChA, " and ", what, ".channel(ChIdA) = ", what.channel(ChIdA)
+  #test "Channels and channel layout properties":
+  #  template doRGBAProcs(what: untyped): untyped =
+  #    echo what, ".ChR = ", what.ChR, " and ", what, ".channel(ChIdR) = ", what.channel(ChIdR)
+  #    echo what, ".ChG = ", what.ChG, " and ", what, ".channel(ChIdG) = ", what.channel(ChIdG)
+  #    echo what, ".ChB = ", what.ChB, " and ", what, ".channel(ChIdB) = ", what.channel(ChIdB)
+  #    echo what, ".ChA = ", what.ChA, " and ", what, ".channel(ChIdA) = ", what.channel(ChIdA)
 
-    template doYCbCrProcs(what: untyped): untyped =
-      echo what, ".ChY  = ", what.ChY,  " and ", what, ".channel(ChIdY)  = ", what.channel(ChIdY)
-      echo what, ".ChCb = ", what.ChCb, " and ", what, ".channel(ChIdCb) = ", what.channel(ChIdCb)
-      echo what, ".ChCr = ", what.ChCr, " and ", what, ".channel(ChIdCr) = ", what.channel(ChIdCr)
+  #  template doYCbCrProcs(what: untyped): untyped =
+  #    echo what, ".ChY  = ", what.ChY,  " and ", what, ".channel(ChIdY)  = ", what.channel(ChIdY)
+  #    echo what, ".ChCb = ", what.ChCb, " and ", what, ".channel(ChIdCb) = ", what.channel(ChIdCb)
+  #    echo what, ".ChCr = ", what.ChCr, " and ", what, ".channel(ChIdCr) = ", what.channel(ChIdCr)
 
-    template doCmpChannelsTest(a, b: untyped): untyped =
-      echo "cmpChannels(", a, ", ", b, ") = ", cmpChannels(a, b)
+  #  template doCmpChannelsTest(a, b: untyped): untyped =
+  #    echo "cmpChannels(", a, ", ", b, ") = ", cmpChannels(a, b)
 
-    let
-      myLayouts = [
-        ChLayoutRGBA.id, ChLayoutBGRA.id,
-        ChLayoutYCbCr.id, ChLayoutYCrCb.id
-      ]
+  #  let
+  #    myLayouts = [
+  #      ChLayoutRGBA.id, ChLayoutBGRA.id,
+  #      ChLayoutYCbCr.id, ChLayoutYCrCb.id
+  #    ]
 
-    for i, layout in myLayouts:
-      echo "Testing ", layout, ":"
-      echo layout, ".len = ", layout.len
-      echo layout, ".channels = ", layout.channels
-      if i > 1: doYCbCrProcs(layout) else: doRGBAProcs(layout)
+  #  for i, layout in myLayouts:
+  #    echo "Testing ", layout, ":"
+  #    echo layout, ".len = ", layout.len
+  #    echo layout, ".channels = ", layout.channels
+  #    if i > 1: doYCbCrProcs(layout) else: doRGBAProcs(layout)
 
-    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutRGBA.id)
-    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutARGB.id)
-    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutRGB.id)
-    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGRA.id)
-    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutABGR.id)
-    doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGR.id)
+  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutRGBA.id)
+  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutARGB.id)
+  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutRGB.id)
+  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGRA.id)
+  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutABGR.id)
+  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGR.id)
 
-  test "Copy channels":
-    let planarpic = readImage[byte]("test/sample.bmp").planar
-    let interleavedpic = planarpic.interleaved
+  #test "Copy channels":
+  #  let planarpic = readImage[byte]("test/sample.bmp").planar
+  #  let interleavedpic = planarpic.interleaved
 
-    var planaroutpic = newDynamicLayoutImage[byte](planarpic.width, planarpic.height, ChLayoutBGR.id).planar
-    var interleavedoutpic = planaroutpic.interleaved
+  #  var planaroutpic = newDynamicLayoutImage[byte](planarpic.width, planarpic.height, ChLayoutBGR.id).planar
+  #  var interleavedoutpic = planaroutpic.interleaved
 
-    planarpic.copyChannelsTo(planaroutpic)
-    interleavedpic.copyChannelsTo(interleavedoutpic)
+  #  planarpic.copyChannelsTo(planaroutpic)
+  #  interleavedpic.copyChannelsTo(interleavedoutpic)
 
-    check planaroutpic.writeImage("test/redbluereverse-planar2planar.bmp", SaveOptions(format: BMP))
-    check interleavedoutpic.writeImage("test/redbluereverse-interleaved2interleaved.bmp", SaveOptions(format: BMP))
+  #  check planaroutpic.writeImage("test/redbluereverse-planar2planar.bmp", SaveOptions(format: BMP))
+  #  check interleavedoutpic.writeImage("test/redbluereverse-interleaved2interleaved.bmp", SaveOptions(format: BMP))
 
-    planarpic.copyChannelsTo(interleavedoutpic)
-    interleavedpic.copyChannelsTo(planaroutpic)
+  #  planarpic.copyChannelsTo(interleavedoutpic)
+  #  interleavedpic.copyChannelsTo(planaroutpic)
 
-    check planaroutpic.writeImage("test/redbluereverse-interleaved2planar.bmp", SaveOptions(format: BMP))
-    check interleavedoutpic.writeImage("test/redbluereverse-planar2interleaved.bmp", SaveOptions(format: BMP))
+  #  check planaroutpic.writeImage("test/redbluereverse-interleaved2planar.bmp", SaveOptions(format: BMP))
+  #  check interleavedoutpic.writeImage("test/redbluereverse-planar2interleaved.bmp", SaveOptions(format: BMP))
 
     

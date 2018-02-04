@@ -1,14 +1,14 @@
 import macros, streams, os, system, sequtils, strutils, math, algorithm, future
 import imghdr, arraymancer
 
-import ./iio_types
+import ./img_types
 import ./fixedseq
-import ./channels
+#import ./colorspace
 
 import stb_image/read as stbi
 import stb_image/write as stbiw
 
-export arraymancer, channels, fixedseq, iio_types
+export arraymancer, fixedseq, img_types
 
 template toType*[U](d: openarray[U], T: typedesc): untyped =
   ## Convert from one array type to another. In the case that the target type

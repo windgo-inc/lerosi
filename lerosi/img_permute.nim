@@ -35,7 +35,7 @@ template rotate_plnr*[T](data: AnyTensor[T], arity: untyped): AnyTensor[T] =
 
 template rotate_plnr*[T](data: AnyTensor[T]): AnyTensor[T] =
   ## Convert the storage shape of the image from Kn⨯...⨯K1⨯C → C⨯Kn⨯...⨯K1.
-  to_planar(data, data.shape.len)
+  rotate_plnr(data, data.shape.len)
 
 template rotate_ilvd*[T](data: AnyTensor[T], arity: untyped): AnyTensor[T] =
   ## Convert the storage shape of the image from C⨯Kn⨯...⨯K1 → Kn⨯...⨯K1⨯C.
@@ -43,7 +43,7 @@ template rotate_ilvd*[T](data: AnyTensor[T], arity: untyped): AnyTensor[T] =
 
 template rotate_ilvd*[T](data: AnyTensor[T]): AnyTensor[T] =
   ## Convert the storage shape of the image from C⨯Kn⨯...⨯K1 → Kn⨯...⨯K1⨯C.
-  to_planar(data, data.shape.len)
+  rotate_ilvd(data, data.shape.len)
 
 {.deprecated: [to_chw: rotate_plnr, to_hwc: rotate_ilvd].}
 

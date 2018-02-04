@@ -1,26 +1,27 @@
 import macros, streams, os, system, sequtils, strutils, math, algorithm, future
 import arraymancer
 
-import ./iio_types
+import ./img_types
 import ./iio_core
 import ./fixedseq
-import ./channels
-import ./colorspace
+#import ./channels
+#import ./colorspace
 
 const
   loaded_channel_layouts = [
-    ChLayoutYp.id, ChLayoutYpA.id,
-    ChLayoutRGB.id, ChLayoutRGBA.id
+    ColorSpaceIdYp, ColorSpaceIdYpA,
+    ColorSpaceIdRGB, ColorSpaceIdRGBA
   ]
 
 
 proc wrap_stbi_loadedlayout_ranged(channels: range[1..4]):
-                        ChannelLayoutId {.noSideEffect, inline, raises: [].} =
-  result = loaded_channel_layouts[channels - 1]
+    ColorSpace {.noSideEffect, inline, raises: [].} =
+  loaded_channel_layouts[channels - 1]
 
 
 proc wrap_stbi_loadedlayout(channels: int):
-                        ChannelLayoutId {.noSideEffect, inline.} =
+    ColorSpace {.noSideEffect, inline.} =
+
   if channels >= 1 and channels <= 4:
     # Compiler has proof that channels is in range by getting here.
     result = wrap_stbi_loadedlayout_ranged(channels)
@@ -29,25 +30,23 @@ proc wrap_stbi_loadedlayout(channels: int):
       "wrap_stbi_loadedlayout: Channel count must be between 1 and 4.")
 
 
-proc readImage*[T: SomeNumber](filename: string): DynamicLayoutImageRef[T] =
+proc readImage*[T: SomeNumber](filename: string): StaticOrderImage[T, ColorSpaceTypeAny, DataInterleaved] =
   let data = filename.imageio_load_core()
-  newDynamicLayoutImageRaw[T](data.asType(T),
-    data.shape[^1].wrap_stbi_loadedlayout(),
-    OrderInterleaved)
+  init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 
-proc readHdrImage*[T: SomeReal](filename: string): DynamicLayoutImageRef[T] =
+proc readHdrImage*[T: SomeReal](filename: string): StaticOrderImage[T, ColorSpaceTypeAny, DataInterleaved] =
   let data = filename.imageio_load_hdr_core()
-  newDynamicLayoutImageRaw[T](data.asType(T),
-    data.shape[^1].wrap_stbi_loadedlayout(),
-    OrderInterleaved)
+  init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 
-proc writeImage*[O: ImageObjectRef](image: O;
-               opts: SaveOptions = SaveOptions(nil)): seq[byte] =
+proc writeImage*(image: SomeImage;
+                opts: SaveOptions = SaveOptions(nil)):
+                seq[byte] {.imageGetter.} =
   imageio_save_core(interleaved(image).data, opts)
 
-proc writeImage*[O: ImageObjectRef](image: O;
-               filename: string;
-               opts: SaveOptions = SaveOptions(nil)): bool =
+proc writeImage*(image: SomeImage;
+                filename: string;
+                opts: SaveOptions = SaveOptions(nil)):
+                bool {.imageGetter.} =
   imageio_save_core(interleaved(image).data, filename, opts)
 
 

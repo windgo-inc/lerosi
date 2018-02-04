@@ -6,6 +6,8 @@ import ./fixedseq
 import ./img_permute
 import ./img_conf
 
+export img_conf
+
 type
   StaticOrderImage*[T; S; O: static[DataOrder]] = object
     dat: Tensor[T]
@@ -17,7 +19,6 @@ type
     order: DataOrder
 
   SomeImage* = distinct int
-
 
 include ./img_accessor
 
@@ -87,6 +88,12 @@ proc extent*(img: SomeImage, i: int): range[1..high(int)] {.imageGetter.} =
       of DataPlanar: img.dataShape[i + 1]
       of DataInterleaved: img.dataShape[i]
 
+proc width*(img: SomeImage): range[1..high(int)] {.imageGetter.} =
+  extent(img, 1)
+
+proc height*(img: SomeImage): range[1..high(int)] {.imageGetter.} =
+  extent(img, 0)
+
 proc extent*(img: SomeImage): MetadataArray {.imageGetter.} =
   when is_static_ordered(img):
     when O == DataPlanar: img.dataShape[1..high(img.dataShape)]
@@ -105,6 +112,7 @@ proc dim*(img: SomeImage): int {.imageGetter.} =
     case img.storage_order:
       of DataPlanar: img.dataShape[1..high(img.dataShape)]
       of DataInterleaved: img.dataShape[0..high(img.dataShape)-1]
+
 
 proc init_image_storage*(img: var SomeImage,
     cspace: ColorSpace = ColorSpaceIdAny,
@@ -136,6 +144,55 @@ proc init_image_storage*(img: var SomeImage,
         of DataInterleaved: doInterleavedInit()
 
   img.dat = newTensorUninit[T](computeShape())
+
+
+# UNSAFE, internal use only
+proc init_image_storage*(img: var SomeImage,
+    cspace: ColorSpace = ColorSpaceIdAny,
+    # cspace argument has no effect on static colorspace images.
+    order: DataOrder = DataPlanar,
+    # order argument has no effect on static ordered images.
+    data: AnyTensor[T])
+    {.imageMutator.} =
+
+  when has_static_colorspace(img):
+    const nchans = colorspace_len(img.S)
+  else:
+    let nchans = colorspace_len(cspace)
+
+  when is_dynamic_ordered(img):
+    img.order = order
+  when has_dynamic_colorspace(img):
+    img.cspace = cspace
+
+  img.dat = data
+
+
+proc planar*[T, S](image: StaticOrderImage[T, S, DataPlanar]): auto {.inline, noSideEffect, raises: [].} =
+  result = image
+
+proc planar*[T, S](image: StaticOrderImage[T, S, DataInterleaved]): StaticOrderImage[T, S, DataPlanar] =
+  init_image_storage(result,
+    image.colorspace, DataPlanar,
+    data = rotate_plnr(image.dat).asContiguous)
+
+proc planar*[T, S](image: DynamicOrderImage[T, S]): DynamicOrderImage[T, S] =
+  init_image_storage(result,
+    image.colorspace, DataPlanar,
+    data = rotate_plnr(image.dat).asContiguous)
+
+proc interleaved*[T, S](image: StaticOrderImage[T, S, DataPlanar]): StaticOrderImage[T, S, DataInterleaved] =
+  init_image_storage(result,
+    image.colorspace, DataInterleaved,
+    data = rotate_ilvd(image.dat).asContiguous)
+
+proc interleaved*[T, S](image: StaticOrderImage[T, S, DataInterleaved]): auto {.inline, noSideEffect, raises: [].} =
+  result = image
+
+proc interleaved*[T, S](image: DynamicOrderImage[T, S]): DynamicOrderImage[T, S] =
+  init_image_storage(result,
+    image.colorspace, DataInterleaved,
+    data = rotate_ilvd(image.dat).asContiguous)
 
 
 when isMainModule:
