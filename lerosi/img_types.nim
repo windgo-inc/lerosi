@@ -29,6 +29,14 @@ macro imageMutator*(targetProc: untyped): untyped =
 
 proc data*(img: SomeImage): auto {.imageGetter.} = img.dat
 
+proc `data=`*(img: var SomeImage, data: AnyTensor[T]) {.imageMutator.} =
+  if data.shape == img.dat.shape:
+    img.dat = data
+  else:
+    raise newException(ValueError,
+      "New tensor is of shape " & $(data.shape) &
+      " but image requires shape " & $(img.dat.shape))
+
 proc inplaceReorder(img: var SomeImage, order: DataOrder) {.imageMutator.} =
   discard
 
@@ -68,12 +76,42 @@ proc `colorspace=`*(img: var SomeImage, cspace: ColorSpace) {.imageMutator.} =
   else:
     img.cspace = cspace
 
-proc init_image_storage(img: var SomeImage,
+proc dataShape*(img: SomeImage): MetadataArray {.imageGetter.} = img.dat.shape
+
+proc extent*(img: SomeImage, i: int): range[1..high(int)] {.imageGetter.} =
+  when is_static_ordered(img):
+    when O == DataPlanar: img.dataShape[i + 1]
+    elif O == DataInterleaved: img.dataShape[i]
+  else:
+    case img.storage_order:
+      of DataPlanar: img.dataShape[i + 1]
+      of DataInterleaved: img.dataShape[i]
+
+proc extent*(img: SomeImage): MetadataArray {.imageGetter.} =
+  when is_static_ordered(img):
+    when O == DataPlanar: img.dataShape[1..high(img.dataShape)]
+    elif O == DataInterleaved: img.dataShape[0..high(img.dataShape)-1]
+  else:
+    case img.storage_order:
+      of DataPlanar: img.dataShape[1..high(img.dataShape)]
+      of DataInterleaved: img.dataShape[0..high(img.dataShape)-1]
+
+proc dim*(img: SomeImage): int {.imageGetter.} =
+  img.dataShape.len - 1
+  when is_static_ordered(img):
+    when O == DataPlanar: [1..high(img.dataShape)]
+    elif O == DataInterleaved: img.dataShape[0..high(img.dataShape)-1]
+  else:
+    case img.storage_order:
+      of DataPlanar: img.dataShape[1..high(img.dataShape)]
+      of DataInterleaved: img.dataShape[0..high(img.dataShape)-1]
+
+proc init_image_storage*(img: var SomeImage,
     cspace: ColorSpace = ColorSpaceIdAny,
     # cspace argument has no effect on static colorspace images.
     order: DataOrder = DataPlanar,
     # order argument has no effect on static ordered images.
-    dim: openarray[int] = [1])
+    dim: MetadataArray)
     {.imageMutator.} =
 
   when has_static_colorspace(img):
@@ -86,19 +124,8 @@ proc init_image_storage(img: var SomeImage,
   when has_dynamic_colorspace(img):
     img.cspace = cspace
   
-  template doPlanarInit: untyped =
-    block:
-      var r = toMetadataArray(nchans)
-      inc(r.len, dim.len)
-      for i in 0..<dim.len: r[i + 1] = dim[i]
-      r
-
-  template doInterleavedInit: untyped =
-    block:
-      var r = toMetadataArray(dim)
-      r.add nchans
-      r
-  
+  template doPlanarInit: untyped = toMetadataArray(nchans) & dim
+  template doInterleavedInit: untyped = dim & nchans
   template computeShape: untyped =
     when is_static_ordered(img):
       when O == DataPlanar: doPlanarInit()

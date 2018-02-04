@@ -3,7 +3,7 @@ import typetraits
 template image_init_test(T: untyped; order, cspace: untyped): untyped =
   var img: T
   echo " : init_image_storage on type ", T.name
-  init_image_storage(img, cspace, order, dim=[6, 6])
+  init_image_storage(img, cspace, order, dim=[6, 6].toMetadataArray)
   echo "img.storage_order = ", img.storage_order
   echo "img.colorspace = ", img.colorspace
   echo "img.data.shape = ", img.data.shape
