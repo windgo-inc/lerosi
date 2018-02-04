@@ -173,12 +173,12 @@ proc makeChannels(): NimNode {.compileTime.} =
     proc channel_name*(ch: string):
       string {.inline, noSideEffect, raises: [].} = ch
 
-  var idproc = newProc(ident"channel_id", [
+  var idproc = newProc(nnkPostfix.newTree(ident"*", ident"channel_id"), [
     ident"ColorChannel",
     newIdentDefs(ident"ch", ident"string")
   ])
 
-  var nameproc = newProc(ident"channel_name", [
+  var nameproc = newProc(nnkPostfix.newTree(ident"*", ident"channel_name"), [
     ident"string",
     newIdentDefs(ident"ch", ident"ColorChannel")
   ])
