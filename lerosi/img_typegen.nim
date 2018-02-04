@@ -26,22 +26,32 @@ proc asChannelCompiler(name: string): int {.compileTime.} =
     result = channelNames.find(name)
 
 
-proc asSingleColorSpaceCompiler(channelstr: string): int {.compileTime.} =
-  if not colorspaceNames.contains(channelstr):
+proc asColorSpaceCompilerImpl(name: string, channelstr: string = nil): int {.compileTime.} =
+  if not colorspaceNames.contains(name):
     inc(colorspaceCounter)
     result = colorspaceCounter
 
-    var chindex: ChannelIndex
-    chindex.setLen(0)
-    for name in capitalTokenIter(channelstr):
-      let i = name.asChannelCompiler
-      chindex.add i
-      channelColorspaces[i].add(colorspaceCounter)
+    colorspaceNames.add name
+    if channelstr.isNilOrEmpty:
+      colorspaceIndices.add(initFixedSeq[int, MAX_IMAGE_CHANNELS]())
+    else:
+      var chindex: ChannelIndex
+      chindex.setLen(0)
+      for name in capitalTokenIter(channelstr):
+        let i = name.asChannelCompiler
+        chindex.add i
+        channelColorspaces[i].add(colorspaceCounter)
 
-    colorspaceNames.add channelstr
-    colorspaceIndices.add chindex
+      colorspaceIndices.add chindex
   else:
-    result = colorspaceNames.find(channelstr)
+    result = colorspaceNames.find(name)
+
+
+proc asAnyColorSpaceCompiler(name: string): int {.compileTime.} =
+  asColorSpaceCompilerImpl(name=name, channelstr=nil)
+
+proc asSingleColorSpaceCompiler(channelstr: string): int {.compileTime.} =
+  asColorSpaceCompilerImpl(name=channelstr, channelstr=channelstr)
 
 
 proc asColorSpaceCompilerImpl(channelseq: var FixedSeq[string, MAX_IMAGE_CHANNELS], count: int): int {.compileTime.} =
@@ -63,6 +73,10 @@ proc asColorSpaceCompiler(channelstr: string): int {.compileTime.} =
   copyFrom(channelseq, capitalTokens(channelstr))
   result = asColorSpaceCompilerImpl(channelseq, channelseq.len)
 
+
+macro defineWildcardColorSpace(node: untyped): untyped =
+  let name = nodeToStr(node)
+  discard asAnyColorSpaceCompiler(name)
   
 macro defineColorSpace(node: untyped): untyped =
   let name = nodeToStr(node)
@@ -77,12 +91,12 @@ macro defineColorSpaceWithAlpha(node: untyped): untyped =
   defineColorSpaceWithAlphaProc(name)
 
 
-template getterPragmaAnyExcept: untyped =
+template getterPragmaAnyExcept*: untyped =
   nnkPragma.newTree(
     ident"inline",
     ident"noSideEffect")
 
-template getterPragma(exceptionList: untyped = newNimNode(nnkBracket)): untyped =
+template getterPragma*(exceptionList: untyped = newNimNode(nnkBracket)): untyped =
   getterPragmaAnyExcept().add(
     nnkExprColonExpr.newTree(ident"raises", exceptionList))
 
@@ -109,7 +123,7 @@ proc makeChannels(): NimNode {.compileTime.} =
       idident = ident(idname)
 
     let st = quote do:
-      type `typ` = distinct int
+      type `typ`* = distinct int
 
       proc channel_name*(T: typedesc[`typ`]):
         string {.inline, noSideEffect, raises: [].} = `name`
@@ -224,7 +238,7 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
       chk.copyChildrenTo(channelChecks)
 
     let st = quote do:
-      type `typ` = distinct int
+      type `typ`* = distinct int
 
       proc colorspace_name*(T: typedesc[`typ`]):
         string {.inline, noSideEffect, raises: [].} = `name`
@@ -345,10 +359,11 @@ proc makeColorSpaceRefs(): NimNode {.compileTime.} =
 
     chspacecases.add(newNimNode(nnkOfBranch).add(chident, newAssignment(ident"result", csset)))
 
-  var spacesproc = newProc(ident"channel_get_colorspaces", [
-    parseExpr"set[ColorSpace]",
-    newIdentDefs(ident"ch", ident"ColorChannel")
-  ])
+  var spacesproc = newProc(
+    nnkPostfix.newTree(ident"*", ident"channel_get_colorspaces"), [
+      parseExpr"set[ColorSpace]",
+      newIdentDefs(ident"ch", ident"ColorChannel")
+    ])
 
   spacesproc.body = chspacecases
   spacesproc.pragma = getterPragma()
@@ -357,6 +372,8 @@ proc makeColorSpaceRefs(): NimNode {.compileTime.} =
 
       
 macro declareColorSpaceMetadata(): untyped =
-  result = makeChannels()
+  result = newStmtList()
+  makeChannels().copyChildrenTo(result)
   makeColorSpaces().copyChildrenTo(result)
   makeColorSpaceRefs().copyChildrenTo(result)
+
