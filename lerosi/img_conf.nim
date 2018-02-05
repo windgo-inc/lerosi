@@ -51,7 +51,8 @@ defineColorSpaceWithAlpha"YCbCr"
 defineColorSpaceWithAlpha"YpCbCr"
 
 # Instantiate the image types and compile-time property getters.
-declareColorSpaceMetadata()
+expandMacros: # Temporary for demonstration.
+  declareColorSpaceMetadata()
 
 {.deprecated: [ColorSpaceAnyType: ColorSpaceTypeAny].}
 

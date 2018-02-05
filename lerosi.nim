@@ -5,12 +5,12 @@ import lerosi/img_types
 import lerosi/iio_core
 import lerosi/iio_base
 import lerosi/fixedseq
-#import lerosi/channels
-#import lerosi/colorspace
 
 export img_types, iio_base, fixedseq
+export arraymancer.MetadataArray
 
 # TODO: Full rework.
+#  Colorspaces done.
 # Public interface begin
 
 

@@ -1,14 +1,17 @@
 
 var
-  enableColorSubspaces: bool = true
+  enableColorSubspaces    {.compileTime.} = true
 
-  channelCounter     {.compileTime.} = 0
-  channelNames       {.compileTime.} = newSeq[string]()
-  channelColorspaces {.compileTime.} = newSeq[seq[int]]()
+  channelCounter          {.compileTime.} = 0
+  channelNames            {.compileTime.} = newSeq[string]()
+  channelColorspaces      {.compileTime.} = newSeq[seq[int]]()
 
-  colorspaceCounter {.compileTime.} = 0
-  colorspaceNames   {.compileTime.} = newSeq[string]()
-  colorspaceIndices {.compileTime.} = newSeq[ChannelIndex]()
+  properColorspaceCounter {.compileTime.} = 0
+  # Counting only full colorspaces, not partial subspaces such as RB or CbCr.
+
+  colorspaceCounter       {.compileTime.} = 0
+  colorspaceNames         {.compileTime.} = newSeq[string]()
+  colorspaceIndices       {.compileTime.} = newSeq[ChannelIndex]()
 
 static:
   channelNames.add("")
@@ -26,7 +29,9 @@ proc asChannelCompiler(name: string): int {.compileTime.} =
     result = channelNames.find(name)
 
 
-proc asColorSpaceCompilerImpl(name: string, channelstr: string = nil): int {.compileTime.} =
+proc asColorSpaceCompilerImpl(name: string, channelstr: string = nil):
+    int {.compileTime.} =
+
   if not colorspaceNames.contains(name):
     inc(colorspaceCounter)
     result = colorspaceCounter
@@ -54,7 +59,10 @@ proc asSingleColorSpaceCompiler(channelstr: string): int {.compileTime.} =
   asColorSpaceCompilerImpl(name=channelstr, channelstr=channelstr)
 
 
-proc asColorSpaceCompilerImpl(channelseq: var FixedSeq[string, MAX_IMAGE_CHANNELS], count: int): int {.compileTime.} =
+proc asColorSpaceCompilerImpl(
+    channelseq: var FixedSeq[string, MAX_IMAGE_CHANNELS], count: int):
+    int {.compileTime.} =
+
   result = asSingleColorSpaceCompiler(channelseq.join)
 
   if enableColorSubspaces:
@@ -72,6 +80,7 @@ proc asColorSpaceCompiler(channelstr: string): int {.compileTime.} =
   var channelseq: FixedSeq[string, MAX_IMAGE_CHANNELS]
   copyFrom(channelseq, capitalTokens(channelstr))
   result = asColorSpaceCompilerImpl(channelseq, channelseq.len)
+  inc properColorspaceCounter
 
 
 macro defineWildcardColorSpace(node: untyped): untyped =
@@ -96,7 +105,9 @@ template getterPragmaAnyExcept*: untyped =
     ident"inline",
     ident"noSideEffect")
 
-template getterPragma*(exceptionList: untyped = newNimNode(nnkBracket)): untyped =
+template getterPragma*(
+    exceptionList: untyped = newNimNode(nnkBracket)): untyped =
+
   getterPragmaAnyExcept().add(
     nnkExprColonExpr.newTree(ident"raises", exceptionList))
 
@@ -136,8 +147,12 @@ proc makeChannels(): NimNode {.compileTime.} =
 
     st.copyChildrenTo(stmts)
 
-    chidcases.add(newNimNode(nnkOfBranch).add(newLit(name), newAssignment(ident"result", idident)))
-    chnamecases.add(newNimNode(nnkOfBranch).add(idident, newAssignment(ident"result", newLit(name))))
+    chidcases.add(
+      newNimNode(nnkOfBranch).add(newLit(name),
+      newAssignment(ident"result", idident)))
+    chnamecases.add(newNimNode(nnkOfBranch).add(
+      idident,
+      newAssignment(ident"result", newLit(name))))
 
     if first:
       first = false
@@ -203,6 +218,8 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
     csidcases = nnkCaseStmt.newTree(ident"cs")
     csnamecases = nnkCaseStmt.newTree(ident"cs")
     cschancases = nnkCaseStmt.newTree(ident"cs")
+    cschanordercases = nnkCaseStmt.newTree(ident"cs")
+    cschanorderspacecases = nnkCaseStmt.newTree(ident"ch") # NOTE ch instead of cs
     cschanlencases = nnkCaseStmt.newTree(ident"cs")
 
   for csid, name in colorspaceNames:
@@ -216,9 +233,11 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
       idident = ident(idname)
 
     var channelSet = newNimNode(nnkCurly)
+    var channelList = newSeq[NimNode]()
     var channelChecks = newStmtList()
-    #for chid in colorspaceIndices[csid]:
+
     var firstch = true
+    var i: int = -1
     for chid, chname in channelNames:
       if firstch:
         firstch = false
@@ -231,7 +250,17 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
         chlit = if hasch: ident"true" else: ident"false"
 
       if hasch:
+        inc i
+
         channelSet.add(chident)
+        channelList.add(chident)
+
+        # Build up the index of channel sub-cases
+        cschanorderspacecases.add(nnkOfBranch.newTree(
+          chident,
+          newIntLitNode(i - 1)
+        ))
+        
       
       let chk = quote do:
         proc colorspace_has_channel*(T: typedesc[`typ`], U: typedesc[`chtyp`]):
@@ -245,21 +274,32 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
 
       proc colorspace_name*(T: typedesc[`typ`]):
         string {.inline, noSideEffect, raises: [].} = `name`
+
       proc `dollarProcVar`*(T: typedesc[`typ`]):
         string {.inline, noSideEffect, raises: [].} = `name`
+
       proc colorspace_type*(T: typedesc[`typ`]):
         typedesc[`typ`] {.inline, noSideEffect, raises: [].} = T
+
       proc colorspace_id*(T: typedesc[`typ`]):
         ColorSpace {.inline, noSideEffect, raises: [].} = `idident`
+
       proc colorspace_channels*(T: typedesc[`typ`]):
         set[ColorChannel] {.inline, noSideEffect, raises: [].} = `channelSet`
+
       proc colorspace_len*(T: typedesc[`typ`]):
         int {.inline, noSideEffect, raises: [].} = `channelSetLen`
+
+      proc colorspace_order*(T: typedesc[`typ`], ColorChannel):
+
       proc colorspace_has_channel*(T: typedesc[`typ`], ch: ColorChannel):
           bool {.inline, noSideEffect, raises: [].} =
         colorspace_channels(T).contains(ch)
-      proc colorspace_has_subspace*(T: typedesc[`typ`], subch: set[ColorChannel]):
+
+      proc colorspace_has_subspace*(
+          T: typedesc[`typ`], subch: set[ColorChannel]):
           bool {.inline, noSideEffect, raises: [].} =
+
         for ch in subch:
           if not colorspace_channels(T).contains(ch):
             return false
@@ -280,6 +320,8 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
       idident,
       newAssignment(ident"result", channelSet)
     ))
+    cschanordercases.add nnkOfBranch.newTree(idident, cschanorderspacecases)
+    cschanorderspacecases = nnkCaseStmt.newTree(ident"ch") # garbage collect old one
     cschanlencases.add(nnkOfBranch.newTree(
       idident,
       newAssignment(ident"result", channelSetLen)
@@ -312,19 +354,23 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
         )))))
 
   let addendum = quote do:
+    # Forced compile-time evaluation using generic params and const.
     proc colorspace_has_subspace_proc*[T; U]:
         bool {.inline, noSideEffect, raises: [].} =
       const subchset = colorspace_channels(U)
       const hassubcs = colorspace_has_subspace(T, subchset)
       hassubcs
 
+    # Syntax sugar to format it is as an ordinary procedure call.
     template colorspace_has_subspace*(T, U: untyped): untyped =
       colorspace_has_subspace_proc[T, U]()
 
     proc colorspace_id*(cs: ColorSpace):
       ColorSpace {.inline, noSideEffect, raises: [].} = cs
+
     proc `dollarProcVar`*(cs: ColorSpace):
       string {.inline, noSideEffect, raises: [].} = colorspace_name(cs)
+
     proc colorspace_name*(cs: string):
       string {.inline, noSideEffect, raises: [].} = cs
 
@@ -333,35 +379,48 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
     newIdentDefs(ident"cs", ident"string")
   ])
 
-  var nameproc = newProc(nnkPostfix.newTree(ident"*", ident"colorspace_name"), [
-    ident"string",
-    newIdentDefs(ident"cs", ident"ColorSpace")
-  ])
+  var nameproc = newProc(nnkPostfix.newTree(ident"*",
+    ident"colorspace_name"), [
+      ident"string",
+      newIdentDefs(ident"cs", ident"ColorSpace")
+    ])
 
-  var chanproc = newProc(nnkPostfix.newTree(ident"*", ident"colorspace_channels"), [
-    nnkBracketExpr.newTree(ident"set", ident"ColorChannel"),
-    newIdentDefs(ident"cs", ident"ColorSpace")
-  ])
+  var chanproc = newProc(nnkPostfix.newTree(ident"*",
+    ident"colorspace_channels"), [
+      nnkBracketExpr.newTree(ident"set", ident"ColorChannel"),
+      newIdentDefs(ident"cs", ident"ColorSpace")
+    ])
 
-  var chanlenproc = newProc(nnkPostfix.newTree(ident"*", ident"colorspace_len"), [
-    ident"int",
-    newIdentDefs(ident"cs", ident"ColorSpace")
-  ])
+  var chanorderproc = newProc(nnkPostfix.newTree(ident"*",
+    ident"colorspace_order"), [
+      ident"int",
+      newIdentDefs(ident"cs", ident"ColorSpace"),
+      newIdentDefs(ident"ch", ident"ColorChannel"),
+    ])
+
+  var chanlenproc = newProc(nnkPostfix.newTree(ident"*",
+    ident"colorspace_len"), [
+      ident"int",
+      newIdentDefs(ident"cs", ident"ColorSpace")
+    ])
 
   idproc.body = newStmtList(csidcases)
   idproc.pragma = getterPragma(newNimNode(nnkBracket).add(ident"ValueError"))
 
   nameproc.body = newStmtList(csnamecases)
   chanproc.body = newStmtList(cschancases)
+  chanorderproc.body = newStmtList(cschanordercases)
   chanlenproc.body = newStmtList(cschanlencases)
 
   nameproc.pragma = getterPragma()
   chanproc.pragma = getterPragma()
+  chanorderproc.pragma = getterPragma()
   chanlenproc.pragma = getterPragma()
 
   result.add idproc
   result.add nameproc
   result.add chanproc
+  result.add chanorderproc
   result.add chanlenproc
 
   addendum.copyChildrenTo(result)
@@ -409,4 +468,10 @@ macro declareColorSpaceMetadata(): untyped =
   makeChannels().copyChildrenTo(result)
   makeColorSpaces().copyChildrenTo(result)
   makeColorSpaceRefs().copyChildrenTo(result)
+
+  let finalmsg = quote do:
+    static:
+      echo "Supporting ", colorspaceCounter, " sub-colorspaces of which ",
+        properColorspaceCounter, " are full colorspaces."
+  finalmsg.copyChildrenTo(result)
 

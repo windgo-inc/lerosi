@@ -19,6 +19,7 @@ type
     order: DataOrder
 
   SomeImage* = distinct int
+  # Perhaps should be defined in img_accessor?
 
 include ./img_accessor
 
