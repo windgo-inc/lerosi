@@ -68,15 +68,15 @@ template rotate_plnr_tplt[T](data: AnyTensor[T], arity: untyped): AnyTensor[T] =
     rotate_plnr_impl(r, arity)
     r
 
-proc rotate_plnr*[T](data: AnyTensor[T], arity: static[int]): AnyTensor[T] = 
+proc rotate_plnr*[T](data: AnyTensor[T], arity: static[int]): AnyTensor[T] =
   ## Convert the storage shape of the image from Kn⨯...⨯K1⨯C → C⨯Kn⨯...⨯K1.
   rotate_plnr_tplt(data, arity)
 
-proc rotate_plnr*[T](data: AnyTensor[T], arity: int): AnyTensor[T] = 
+proc rotate_plnr*[T](data: AnyTensor[T], arity: int): AnyTensor[T] =
   ## Convert the storage shape of the image from Kn⨯...⨯K1⨯C → C⨯Kn⨯...⨯K1.
   rotate_plnr_tplt(data, arity)
 
-proc rotate_plnr*[T](data: AnyTensor[T]): AnyTensor[T] = 
+proc rotate_plnr*[T](data: AnyTensor[T]): AnyTensor[T] =
   ## Convert the storage shape of the image from Kn⨯...⨯K1⨯C → C⨯Kn⨯...⨯K1.
   rotate_plnr_tplt(data, data.shape.len)
 
@@ -101,10 +101,4 @@ proc rotate_ilvd*[T](data: AnyTensor[T]): AnyTensor[T] =
 
 {.deprecated: [to_chw: rotate_plnr, to_hwc: rotate_ilvd].}
 
-#template to_chw*[T](data: Tensor[T]): Tensor[T] =
-#  data.permute(2, 0, 1)
-#
-#
-#template to_hwc*[T](data: Tensor[T]): Tensor[T] =
-#  ## Convert the storage shape of the image from C⨯H⨯W → H⨯W⨯C.
-#  data.permute(1, 2, 0)
+

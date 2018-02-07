@@ -173,14 +173,22 @@ proc planar*[T, S](image: StaticOrderImage[T, S, DataInterleaved]): StaticOrderI
     data = rotate_plnr(image.dat).asContiguous)
 
 proc planar*[T, S](image: DynamicOrderImage[T, S]): DynamicOrderImage[T, S] =
+  let
+    data = case image.order:
+      of DataInterleaved: rotate_plnr(image.dat).asContiguous
+      of DataPlanar: image.dat
   init_image_storage(result,
     image.colorspace, DataPlanar,
-    data = rotate_plnr(image.dat).asContiguous)
+    data = data)
 
 proc interleaved*[T, S](image: StaticOrderImage[T, S, DataPlanar]): StaticOrderImage[T, S, DataInterleaved] =
+  let
+    data = case image.order:
+      of DataPlanar: rotate_ilvd(image.dat).asContiguous
+      of DataInterleaved: image.dat
   init_image_storage(result,
     image.colorspace, DataInterleaved,
-    data = rotate_ilvd(image.dat).asContiguous)
+    data = data)
 
 proc interleaved*[T, S](image: StaticOrderImage[T, S, DataInterleaved]): auto {.inline, noSideEffect, raises: [].} =
   result = image
