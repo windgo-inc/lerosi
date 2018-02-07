@@ -45,7 +45,7 @@ template getterPragma*(
   getterPragmaAnyException().add(
     nnkExprColonExpr.newTree(ident"raises", exceptionList))
 
-template accessorPragmaAnyException*(allowSideEffects: bool): untyped =
+template accessorPragmaAnyException*(ase: bool): untyped =
   # NOTE : There is a careful design decision here to suggest inlining to
   # the compiler if the code can't produce any side effects. The reasoning
   # behind it is that an side effect causing accessor likely won't benefit
@@ -62,10 +62,10 @@ template accessorPragmaAnyException*(allowSideEffects: bool): untyped =
   else:
     getterPragmaAnyException()
 
-template accessorPragma*(allowSideEffects: bool,
+template accessorPragma*(ase: bool,
     exceptionList: untyped = newNimNode(nnkBracket)): untyped =
 
-  accessorPragmaAnyException().add(
+  accessorPragmaAnyException(ase).add(
     nnkExprColonExpr.newTree(ident"raises", exceptionList))
 
 {.deprecated: [getterPragmaAnyExcept: getterPragmaAnyException].}
