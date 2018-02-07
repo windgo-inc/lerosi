@@ -164,15 +164,19 @@ proc init_image_storage*(img: var SomeImage,
   img.dat = data
 
 
-proc planar*[T, S](image: StaticOrderImage[T, S, DataPlanar]): auto {.inline, noSideEffect, raises: [].} =
-  result = image
+proc planar*[T, S](image: StaticOrderImage[T, S, DataPlanar]):
+    auto {.inline, noSideEffect, raises: [].} = image
 
-proc planar*[T, S](image: StaticOrderImage[T, S, DataInterleaved]): StaticOrderImage[T, S, DataPlanar] =
+proc planar*[T, S](image: StaticOrderImage[T, S, DataInterleaved]):
+    StaticOrderImage[T, S, DataPlanar] =
+
   init_image_storage(result,
     image.colorspace, DataPlanar,
     data = rotate_plnr(image.dat).asContiguous)
 
-proc planar*[T, S](image: DynamicOrderImage[T, S]): DynamicOrderImage[T, S] =
+proc planar*[T, S](image: DynamicOrderImage[T, S]):
+    DynamicOrderImage[T, S] =
+
   let
     data = case image.order:
       of DataInterleaved: rotate_plnr(image.dat).asContiguous
@@ -181,7 +185,17 @@ proc planar*[T, S](image: DynamicOrderImage[T, S]): DynamicOrderImage[T, S] =
     image.colorspace, DataPlanar,
     data = data)
 
-proc interleaved*[T, S](image: StaticOrderImage[T, S, DataPlanar]): StaticOrderImage[T, S, DataInterleaved] =
+proc interleaved*[T, S](image: StaticOrderImage[T, S, DataPlanar]):
+    StaticOrderImage[T, S, DataInterleaved] =
+
+  init_image_storage(result,
+    image.colorspace, DataInterleaved,
+    data = rotate_ilvd(image.dat).asContiguous)
+
+proc interleaved*[T, S](image: StaticOrderImage[T, S, DataInterleaved]):
+  auto {.inline, noSideEffect, raises: [].} = image
+
+proc interleaved*[T, S](image: DynamicOrderImage[T, S]): DynamicOrderImage[T, S] =
   let
     data = case image.order:
       of DataPlanar: rotate_ilvd(image.dat).asContiguous
@@ -189,15 +203,6 @@ proc interleaved*[T, S](image: StaticOrderImage[T, S, DataPlanar]): StaticOrderI
   init_image_storage(result,
     image.colorspace, DataInterleaved,
     data = data)
-
-proc interleaved*[T, S](image: StaticOrderImage[T, S, DataInterleaved]): auto {.inline, noSideEffect, raises: [].} =
-  result = image
-
-proc interleaved*[T, S](image: DynamicOrderImage[T, S]): DynamicOrderImage[T, S] =
-  init_image_storage(result,
-    image.colorspace, DataInterleaved,
-    data = rotate_ilvd(image.dat).asContiguous)
-
 
 when isMainModule:
   {.push checks: on.} # Thorough runtime bounds checking for the tests.

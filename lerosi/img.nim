@@ -27,6 +27,6 @@ proc colorspace*[S, M](lens: StaticLens[S, M]):
     ColorSpace {.inline, noSideEffect, raises: [].} =
   when S is ColorSpaceTypeAny: lens.cspace else: S
 
-proc init_image
+#proc init_image*[]
 
 

@@ -9,6 +9,8 @@ proc imageAccessor(targetProc: NimNode,
     dynamicBody = newStmtList()
     targetBody = body(targetProc)
 
+    placeholders = newSeq[string]()
+
   staticBody.add(parseStmt"const isStaticTarget = true")
   dynamicBody.add(parseStmt"const isStaticTarget = false")
   targetBody.copyChildrenTo(staticBody)
@@ -19,6 +21,9 @@ proc imageAccessor(targetProc: NimNode,
     dynamicParams = targetProc.params.copy
 
   iterator paramsOfType(node: NimNode, name: string, allow: bool): int =
+    template condition(data, against: string): bool =
+      data.startsWith(against) or data.endsWith(against)
+
     var count: int = 0
     for ch in node.children:
       case ch.kind:
@@ -26,7 +31,7 @@ proc imageAccessor(targetProc: NimNode,
         if allow:
           case ch[1].kind:
           of nnkIdent:
-            if $ch[1] == name:
+            if condition($ch[1], name):
               yield count
           of nnkVarTy:
             if $ch[1][0] == name:
@@ -48,20 +53,21 @@ proc imageAccessor(targetProc: NimNode,
           params[i][1][0] = variant.copy
         else:
           params[i][1] = variant.copy
-      else: discard
-
+      else:
+        discard
 
   let
     staticVariant = nnkBracketExpr.newTree(
-      ident"StaticOrderImage", ident"T", ident"S", ident"O")
+      ident"StaticOrderImage",
+      ident"T", ident"S", ident"O")
     dynamicVariant = nnkBracketExpr.newTree(
-      ident"DynamicOrderImage", ident"T", ident"S")
+      ident"DynamicOrderImage",
+      ident"T", ident"S")
 
   process_params(staticParams, staticVariant)
   process_params(dynamicParams, dynamicVariant)
 
   result = newStmtList()
-
   
   # StaticOrderImage procedure
   result.add nnkProcDef.newTree(
