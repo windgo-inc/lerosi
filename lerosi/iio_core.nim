@@ -29,7 +29,7 @@ proc imageio_check_format*[T](data: openarray[T]): ImageType =
   testImage(header)
 
 
-template imageio_load_core*(resource: untyped): Tensor[byte] =
+template imageio_load_core_impl(resource: untyped): Tensor[byte] =
   ## Load an image from a file or memory
   block:
     var res: Tensor[byte]
@@ -38,19 +38,29 @@ template imageio_load_core*(resource: untyped): Tensor[byte] =
       let itype = resource.imageio_check_format()
 
       # Select loader.
-      if itype == imghdr.ImageType.HDR:
+      case itype:
+      of imghdr.ImageType.HDR:
         raise newException(IIOError, "LERoSI-IIO: HDR format must be loaded through the image_load_hdr interface.")
-      elif itype in {imghdr.ImageType.BMP, imghdr.ImageType.PNG, imghdr.ImageType.JPEG}:
+      of {imghdr.ImageType.BMP, imghdr.ImageType.PNG, imghdr.ImageType.JPEG}:
         let desired_ch = 0
         var w, h, ch: int
 
-        let pixels =
-          when resource is string:
-            # resource is interpreted as a filename if it is a string.
-            stbi.load(resource, w, h, ch, desired_ch)
-          else:
-            # resource is interpreted as an encoded image if it is an openarray
-            stbi.loadFromMemory(resource.toType(byte), w, h, ch, desired_ch)
+        # TODO: replace the nim stbi.loadFromMemory procedure with a
+        # direct usage of stb_image that forgoes the need of a dynamic
+        # sequence, as is already done in the HDR routine below.
+        let
+          pixels =
+            when resource is string:
+              # resource is interpreted as a filename if it is a string.
+              stbi.load(resource, w, h, ch, desired_ch)
+            else:
+              when resource is seq:
+                # resource is interpreted as an encoded image if it is an openarray
+                stbi.loadFromMemory(resource.toType(byte), w, h, ch, desired_ch)
+              else:
+                (block:
+                  let seqResource = @(resource)
+                  stbi.loadFromMemory(seqResource.toType(byte), w, h, ch, desired_ch))
 
       
         var im1 = newTensorUninit[byte]([h, w, ch])
@@ -71,6 +81,11 @@ template imageio_load_core*(resource: untyped): Tensor[byte] =
 
     res
 
+proc imageio_load_core*[T](data: openarray[T]): Tensor[byte] =
+  data.imageio_load_core_impl
+
+proc imageio_load_core*(filename: string): Tensor[byte] =
+  filename.imageio_load_core_impl
 
 
 proc stbi_loadf(
@@ -111,7 +126,7 @@ proc stbi_image_free(p: pointer) {.importc: "stbi_image_free".}
 
 
 
-template imageio_load_hdr_core*(resource: untyped): Tensor[float32] =
+template imageio_load_hdr_core_impl(resource: untyped): Tensor[float32] =
   block:
     var res: Tensor[float32]
     try:
@@ -119,24 +134,24 @@ template imageio_load_hdr_core*(resource: untyped): Tensor[float32] =
       let itype = resource.imageio_check_format()
 
       # Select loader.
-      if itype == imghdr.ImageType.HDR:
-        let desired_ch = 0
-        var w, h, ch: cint
-
-        let data: ptr cfloat =
-          when resource is string:
-            stbi_loadf(resource.cstring, w, h, ch, desired_ch.cint)
-          else:
-            stbi_loadf_from_memory(cast[ptr cuchar](resource[0].unsafeAddr), resource.len.cint, w, h, ch, desired_ch.cint)
-        
-        var pixelsOut: seq[cfloat]
-        newSeq(pixelsOut, w*h*ch)
-        copyMem(pixelsOut[0].addr, data, pixelsOut.len * sizeof(cfloat))
-
-        res = pixelsOut.toTensor().reshape([h.int, w, ch]).asType(float32).asContiguous()
-        stbi_image_free(data)
-      else:
+      if not (itype == imghdr.ImageType.HDR):
         raise newException(IIOError, "LERoSI-IIO-HDR: Not an HDR format - " & $itype)
+
+      let desired_ch = 0
+      var w, h, ch: cint
+
+      let data: ptr cfloat =
+        when resource is string:
+          stbi_loadf(resource.cstring, w, h, ch, desired_ch.cint)
+        else:
+          stbi_loadf_from_memory(cast[ptr cuchar](resource[0].unsafeAddr), resource.len.cint, w, h, ch, desired_ch.cint)
+      
+      var pixelsOut: seq[cfloat]
+      newSeq(pixelsOut, w*h*ch)
+      copyMem(pixelsOut[0].addr, data, pixelsOut.len * sizeof(cfloat))
+
+      res = pixelsOut.toTensor().reshape([h.int, w, ch]).asType(float32).asContiguous()
+      stbi_image_free(data)
 
     except STBIException:
       raise newException(IIOError, "LERoSI-IIO-HDR: Backend: " & getCurrentException().msg)
@@ -146,6 +161,12 @@ template imageio_load_hdr_core*(resource: untyped): Tensor[float32] =
       raise newException(IIOError, "LERoSI-IIO-HDR: System: " & getCurrentException().msg)
 
     res
+
+proc imageio_load_hdr_core*[T](data: openarray[T]): Tensor[float32] =
+  data.imageio_load_hdr_core_impl
+
+proc imageio_load_hdr_core*(filename: string): Tensor[float32] =
+  filename.imageio_load_hdr_core_impl
 
 
 # NOTE: We replaced width, height, and channel Tensor properties, since at the low level,

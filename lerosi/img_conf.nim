@@ -4,11 +4,9 @@ import ./macroutil
 import ./fixedseq
 
 const
-  MAX_IMAGE_CHANNELS = 7
+  MAX_IMAGE_CHANNELS* = 7
 
 type
-  ChannelIndex* = FixedSeq[int, MAX_IMAGE_CHANNELS]
-
   ImageFormat* = enum
     PNG, BMP, JPEG, HDR
   SaveOptions* = ref object
@@ -27,13 +25,9 @@ type
   #ColorSpaceAnyType* = distinct int
   IIOError* = object of Exception
 
+
 # Type generating macros are kept seperately.
 include ./img_typegen
-
-proc initChannelIndex*(dat: openarray[int]): ChannelIndex {.inline.} =
-  result.setLen(dat.len)
-  for i in 0..<dat.len:
-    result[i] = dat[i]
 
 # Meta colorspace specifying runtime configuration of colorspaces.
 defineWildcardColorSpace"Any"
@@ -51,8 +45,9 @@ defineColorSpaceWithAlpha"YCbCr"
 defineColorSpaceWithAlpha"YpCbCr"
 
 # Instantiate the image types and compile-time property getters.
-expandMacros: # Temporary for demonstration.
-  declareColorSpaceMetadata()
+#expandMacros:
+declareColorSpaceMetadata()
+declareNamedFixedSeq(ChannelMap, ColorChannel, MAX_IMAGE_CHANNELS)
 
 {.deprecated: [ColorSpaceAnyType: ColorSpaceTypeAny].}
 

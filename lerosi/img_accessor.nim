@@ -1,5 +1,7 @@
 
-proc imageAccessor(targetProc: NimNode, allowMutableImages: bool):
+proc imageAccessor(targetProc: NimNode,
+    allowMutableImages: bool,
+    allowSideEffects: bool = false):
     NimNode {.compileTime.} =
 
   var
@@ -75,7 +77,7 @@ proc imageAccessor(targetProc: NimNode, allowMutableImages: bool):
       nnkStaticTy.newTree(bindSym"DataOrder"),
       newEmptyNode())),
     staticParams.copy,
-    getterPragmaAnyExcept(),
+    accessorPragmaAnyException(allowSideEffects),
     newEmptyNode(),
     staticBody
   )
@@ -90,8 +92,18 @@ proc imageAccessor(targetProc: NimNode, allowMutableImages: bool):
       newEmptyNode(),
       newEmptyNode())),
     dynamicParams.copy,
-    getterPragmaAnyExcept(),
+    accessorPragmaAnyException(allowSideEffects),
     newEmptyNode(),
     dynamicBody
   )
+
+macro imageGetter*(targetProc: untyped): untyped =
+  result = imageAccessor(targetProc, false)
+
+macro imageMutator*(targetProc: untyped): untyped =
+  result = imageAccessor(targetProc, true)
+
+macro imageProc*(targetProc: untyped): untyped =
+  # second boolean argument is to allow side effects
+  result = imageAccessor(targetProc, true, true)
 

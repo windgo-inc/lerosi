@@ -19,6 +19,7 @@
 
 
 import system, sequtils, future
+import macros, ./macroutil
 
 
 type FixedSeq*[T; N: static[int]] = object
@@ -214,5 +215,67 @@ proc join*[A: FixedSeq](fixseq: A, x: string = ""): string =
   result = ""
   for i in 0..<fixseq.len:
     result.add $(fixseq[i])
+
+
+proc declare_named_proc(name, T, length: NimNode): NimNode {.compileTime.} =
+  let
+    namestr = nodeToStr(name)
+    nameident = ident(namestr)
+    initident = ident("init" & namestr)
+    initcalllen = newCall(ident"setLen", [ident"result", ident"le"])
+    initcalldat = newCall(ident"copyFrom", [ident"result", ident"dat"])
+    typeident = ident(nodeToStr(T))
+    seqtype = nnkBracketExpr.newTree(ident"FixedSeq", typeident, length)
+
+  var initleninplaceproc = newProc(
+    postfix(initident.copy, "*"),
+    [ident"void",
+      nnkIdentDefs.newTree(ident"result", nnkVarTy.newTree(nameident), newEmptyNode()),
+      nnkIdentDefs.newTree(ident"le", ident"int", newLit(0))
+    ])
+  var initlenproc = newProc(
+    postfix(initident.copy, "*"),
+    [nameident, nnkIdentDefs.newTree(ident"le", ident"int", newLit(0))])
+
+  var initdatinplaceproc = newProc(
+    postfix(initident.copy, "*"),
+    [ident"void",
+      nnkIdentDefs.newTree(ident"result", nnkVarTy.newTree(nameident), newEmptyNode()),
+      nnkIdentDefs.newTree(ident"dat", nnkBracketExpr.newTree(ident"openarray", typeident.copy), newEmptyNode())
+    ])
+  var initdatproc = newProc(
+    postfix(initident.copy, "*"),
+    [nameident, nnkIdentDefs.newTree(ident"dat", nnkBracketExpr.newTree(ident"openarray", typeident.copy), newEmptyNode())])
+
+  initleninplaceproc.body = initcalllen.copy
+  initleninplaceproc.pragma = nnkPragma.newTree(ident"inline")
+
+  initlenproc.body = initcalllen.copy
+  initlenproc.pragma = nnkPragma.newTree(ident"inline")
+
+  initdatinplaceproc.body = initcalldat.copy
+  initdatinplaceproc.pragma = nnkPragma.newTree(ident"inline")
+
+  initdatproc.body = initcalldat.copy
+  initdatproc.pragma = nnkPragma.newTree(ident"inline")
+
+  result = newStmtList()
+  result.add nnkTypeSection.newTree(
+    nnkTypeDef.newTree(
+      nnkPostFix.newTree(ident"*", nameident),
+      newEmptyNode(),
+      nnkBracketExpr.newTree(
+        ident"FixedSeq",
+        ident(nodeToStr(T)),
+        length)))
+
+  result.add initdatinplaceproc
+  result.add initleninplaceproc
+  result.add initdatproc
+  result.add initlenproc
+
+
+macro declareNamedFixedSeq*(name, T, length: untyped): untyped =
+  result = declare_named_proc(name, T, length)
 
 

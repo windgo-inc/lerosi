@@ -34,3 +34,39 @@ proc capitalTokenCount*(str: string): int {.compileTime.} =
   for tok in capitalTokenIter(str):
     inc result
 
+template getterPragmaAnyException*: untyped =
+  nnkPragma.newTree(
+    ident"inline",
+    ident"noSideEffect")
+
+template getterPragma*(
+    exceptionList: untyped = newNimNode(nnkBracket)): untyped =
+
+  getterPragmaAnyException().add(
+    nnkExprColonExpr.newTree(ident"raises", exceptionList))
+
+template accessorPragmaAnyException*(allowSideEffects: bool): untyped =
+  # NOTE : There is a careful design decision here to suggest inlining to
+  # the compiler if the code can't produce any side effects. The reasoning
+  # behind it is that an side effect causing accessor likely won't benefit
+  # the performance of the code in to which it is inlined, because it's
+  # internals are likely to access things which are farther away an less
+  # likely to be cached. In addition, it is also likely that the body of
+  # such a procedure will not be kind to code size if inlined repeatedly.
+  # Getters and local mutators are by contrast highly optimizable because
+  # they produce no side effects, further reducing their probable footprint.
+  # Tests should be done with and without inline on getters and mutators
+  # to see the difference.
+  if allowSideEffects:
+    nnkPragma.newTree
+  else:
+    getterPragmaAnyException()
+
+template accessorPragma*(allowSideEffects: bool,
+    exceptionList: untyped = newNimNode(nnkBracket)): untyped =
+
+  accessorPragmaAnyException().add(
+    nnkExprColonExpr.newTree(ident"raises", exceptionList))
+
+{.deprecated: [getterPragmaAnyExcept: getterPragmaAnyException].}
+

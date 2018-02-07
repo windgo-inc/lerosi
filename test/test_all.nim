@@ -2,21 +2,47 @@ import system, strutils, unittest, macros, math
 import typetraits
 
 import lerosi
+import lerosi/img_permute
 import lerosi/iio_core # we test the internals of IIO from here
 
 # Nicer alias for save options.
 type
   SO = SaveOptions
 
+const testColorSpaceIds = [
+  ColorSpaceIdA,
+  ColorSpaceIdY,
+  ColorSpaceIdYA,
+  ColorSpaceIdYp,
+  ColorSpaceIdYpA,
+  ColorSpaceIdYCbCr,
+  ColorSpaceIdYCbCrA,
+  ColorSpaceIdYpCbCr,
+  ColorSpaceIdYpCbCrA,
+  ColorSpaceIdRGB,
+  ColorSpaceIdRGBA,
+  ColorSpaceIdHSV,
+  ColorSpaceIdHSVA,
+  ColorSpaceIdCMYe,
+  ColorSpaceIdCMYeA
+]
 
 suite "LERoSI Unit Tests":
   var
+    # IIO/base globals
     testpic_initialized = false
     testpic: Tensor[byte]
     hdrpic: Tensor[cfloat]
     expect_shape: MetadataArray
 
-  test "IIO load test reference image (PNG) core implementation":
+    # IIO/core globals
+    testimg: StaticOrderImage[byte, ColorSpaceTypeAny, DataInterleaved]
+
+    plnrimg: StaticOrderImage[byte, ColorSpaceTypeAny, DataPlanar]
+    ilvdimg: StaticOrderImage[byte, ColorSpaceTypeAny, DataInterleaved]
+    dynimg: DynamicOrderImage[byte, ColorSpaceTypeAny]
+
+  test "IIO/core load test reference image (PNG)":
     try:
       testpic = imageio_load_core("test/sample.png")
       hdrpic = testpic.asType(cfloat) / 255.0
@@ -40,6 +66,7 @@ suite "LERoSI Unit Tests":
 
   template require_consistency[T; U](pic: Tensor[T], expectpic: Tensor[U]): untyped =
     require_equal_extent pic, expectpic
+    # TODO: Add a histogram check
 
   template require_consistency[T](pic: Tensor[T]): untyped =
     require_consistency pic, testpic
@@ -50,13 +77,13 @@ suite "LERoSI Unit Tests":
   template check_consistency[T](pic: Tensor[T]): untyped =
     check_consistency pic, testpic
 
-  template test_jpeg_decades(fn: untyped): untyped =
-    template gn(qual: int): untyped =
-      fn(qual);   fn(qual-1); fn(qual-2); fn(qual-3); fn(qual-4);
-      fn(qual-5); fn(qual-6); fn(qual-7); fn(qual-8); fn(qual-9);
+  #template test_jpeg_decades(fn: untyped): untyped =
+  #  template gn(qual: int): untyped =
+  #    fn(qual);   fn(qual-1); fn(qual-2); fn(qual-3); fn(qual-4);
+  #    fn(qual-5); fn(qual-6); fn(qual-7); fn(qual-8); fn(qual-9);
 
-    gn(100); gn(90); gn(80); gn(70);
-    gn(60);  gn(50); gn(40); gn(30);
+  #  gn(100); gn(90); gn(80);# gn(70);
+  #  #gn(60);  gn(50); gn(40); gn(30);
 
   test "IIO obtained test image":
     require testpic_initialized
@@ -67,17 +94,17 @@ suite "LERoSI Unit Tests":
   test "Tensor image extent equality":
     require_equal_extent testpic
 
-  test "IIO save BMP core implementation":
+  test "IIO/core save BMP":
     require testpic.imageio_save_core(
       "test/samplepng-out.bmp",
       SO(format: BMP))
 
-  test "IIO save PNG core implementation":
+  test "IIO/core save PNG":
     require testpic.imageio_save_core(
       "test/samplepng-out.png",
       SO(format: PNG, stride: 0))
 
-  test "IIO save JPEG core implementation":
+  test "IIO/core save JPEG":
     require testpic.imageio_save_core(
       "test/samplepng-out.jpeg",
       SO(format: JPEG, quality: 100))
@@ -89,28 +116,26 @@ suite "LERoSI Unit Tests":
       "test/samplepng-out.q" & $qual & ".jpeg",
       SO(format: JPEG, quality: qual))
 
-  template jpeg_write_quality_test(qual: int): untyped =
-    test "IIO save JPEG(quality=" & $qual & ") core implementation":
+  test "IIO/core save JPEG quality parameter coverage":
+    for qual in countdown(100, 20):
       check do_write_jpeg_test(testpic, qual)
-  
-  test_jpeg_decades(jpeg_write_quality_test)
 
-  test "IIO save HDR core implementation":
+  test "IIO/core save HDR":
     check imageio_save_core(hdrpic,
       "test/samplepng-out.hdr",
       SO(format: HDR))
 
   # Loading
 
-  test "IIO load BMP core implementation":
+  test "IIO/core load BMP":
     let inpic = imageio_load_core("test/samplepng-out.bmp")
     check_consistency inpic
     
-  test "IIO load PNG core implementation":
+  test "IIO/core load PNG":
     let inpic = imageio_load_core("test/samplepng-out.png")
     check_consistency inpic
 
-  test "IIO load JPEG core implementation":
+  test "IIO/core load JPEG":
     let inpic = imageio_load_core("test/samplepng-out.jpeg")
     check_consistency inpic
 
@@ -124,41 +149,269 @@ suite "LERoSI Unit Tests":
     result = imageio_load_core(res)
 
 
-  template jpeg_read_quality_test(qual: int): untyped =
-    test "IIO load JPEG(quality=" & $qual & ") core implementation":
-      let inpic = do_read_jpeg_test(qual)
-      check_consistency inpic
-  
-  test_jpeg_decades(jpeg_read_quality_test)
+  test "IIO/core load JPEG quality parameter coverage":
+    for qual in countdown(100, 80):
+      check_consistency do_read_jpeg_test(qual)
 
-  test "IIO load HDR core implementation":
+  test "IIO/core load HDR":
     let inpic = imageio_load_hdr_core("test/samplepng-out.hdr")
     check_consistency inpic, hdrpic
 
-  test "IIO encode/decode BMP in-memory core implementation":
+  test "IIO/core encode and decode BMP in-memory":
     let coredata = imageio_save_core(testpic, SO(format: BMP))
-    echo "Saved BMP size is ", coredata.len.float / 1024.0, "KB"
+    echo "    # Saved BMP size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.do_read_res_test
     check_consistency testpic, recovered
 
-  test "IIO encode/decode PNG in-memory core implementation":
+  test "IIO/core encode and decode PNG in-memory":
     let coredata = imageio_save_core(testpic, SO(format: PNG, stride: 0))
-    echo "Saved PNG size is ", coredata.len.float / 1024.0, "KB"
+    echo "    # Saved PNG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.do_read_res_test
     check_consistency testpic, recovered
 
-  test "IIO encode/decode JPEG in-memory core implementation":
+  test "IIO/core encode and decode JPEG in-memory":
     let coredata = imageio_save_core(testpic, SO(format: JPEG, quality: 100))
-    echo "Saved JPEG size is ", coredata.len.float / 1024.0, "KB"
+    echo "    # Saved JPEG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.do_read_res_test
     check_consistency testpic, recovered
 
-  test "IIO encode/decode HDR in-memory core implementation":
+  test "IIO/core encode and decode HDR in-memory":
     let coredata = imageio_save_core(hdrpic, SO(format: HDR))
-    echo "Saved HDR size is ", coredata.len.float / 1024.0, "KB"
+    echo "    # Saved HDR size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.imageio_load_hdr_core
     check_consistency hdrpic, recovered
 
+  test "img/permute shift data order explicit arity correctness":
+    let plnrpic = rotate_plnr(testpic, 3)
+    check plnrpic.shape[1..2] == testpic.shape[0..1]
+    for i in 0..plnrpic.shape[0]-1:
+      check plnrpic[i, _].squeeze == testpic[_, _, i].squeeze
+    let ilvdpic = rotate_ilvd(plnrpic, 3)
+    check ilvdpic.shape == testpic.shape
+    check ilvdpic == testpic
+
+  test "img/permute shift data order implicit arity correctness":
+    let plnrpic = rotate_plnr(testpic)
+    check plnrpic.shape[1..2] == testpic.shape[0..1]
+    check plnrpic[0, _].squeeze == testpic[_, _, 0].squeeze
+    let ilvdpic = rotate_ilvd(plnrpic)
+    for i in 0..plnrpic.shape[0]-1:
+      check plnrpic[i, _].squeeze == testpic[_, _, i].squeeze
+
+  template onEachColorspaceType(fn: untyped): untyped =
+    fn(ColorSpaceTypeA)
+    fn(ColorSpaceTypeY)
+    fn(ColorSpaceTypeYA)
+    fn(ColorSpaceTypeYp)
+    fn(ColorSpaceTypeYpA)
+    fn(ColorSpaceTypeYCbCr)
+    fn(ColorSpaceTypeYCbCrA)
+    fn(ColorSpaceTypeYpCbCr)
+    fn(ColorSpaceTypeYpCbCrA)
+    fn(ColorSpaceTypeRGB)
+    fn(ColorSpaceTypeRGBA)
+    fn(ColorSpaceTypeHSV)
+    fn(ColorSpaceTypeHSVA)
+    fn(ColorSpaceTypeCMYe)
+    fn(ColorSpaceTypeCMYeA)
+
+  template onEachColorspaceId(fn: untyped): untyped =
+    fn(ColorSpaceIdA)
+    fn(ColorSpaceIdY)
+    fn(ColorSpaceIdYA)
+    fn(ColorSpaceIdYp)
+    fn(ColorSpaceIdYpA)
+    fn(ColorSpaceIdYCbCr)
+    fn(ColorSpaceIdYCbCrA)
+    fn(ColorSpaceIdYpCbCr)
+    fn(ColorSpaceIdYpCbCrA)
+    fn(ColorSpaceIdRGB)
+    fn(ColorSpaceIdRGBA)
+    fn(ColorSpaceIdHSV)
+    fn(ColorSpaceIdHSVA)
+    fn(ColorSpaceIdCMYe)
+    fn(ColorSpaceIdCMYeA)
+
+  template lengthCheck(cspace: untyped): untyped =
+    const cslen = colorspace_len(cspace)
+    const csorder = colorspace_order(cspace)
+    check csorder.len == cslen
+
+  template runTimeLengthCheck(cspace: untyped): untyped =
+    let cslen = colorspace_len(cspace)
+    let csorder = colorspace_order(cspace)
+    check csorder.len == cslen
+
+  template orderCheck(cspace: untyped): untyped =
+    const csorder = colorspace_order(cspace)
+    const cschans = colorspace_channels(cspace)
+
+    var n: int = 0
+    for ch in cschans:
+      inc n
+      check csorder[colorspace_order(cspace, ch)] == ch
+
+    check n == csorder.len
+    for i, o in csorder:
+      check i == colorspace_order(cspace, o)
+
+  template runTimeOrderCheck(cspace: untyped): untyped =
+    let csorder = colorspace_order(cspace)
+    let cschans = colorspace_channels(cspace)
+
+    var n: int = 0
+    for ch in cschans:
+      inc n
+      check csorder[colorspace_order(cspace, ch)] == ch
+
+    check n == csorder.len
+    for i, o in csorder:
+      check i == colorspace_order(cspace, o)
+
+  template nameCheck(cspace: untyped): untyped =
+    const name = cspace.colorspace_name
+    const cspaceId = cspace.colorspace_id
+    const nameToId = name.colorspace_id
+    check cspaceId == nameToId
+
+  template runTimeNameCheck(cspace: untyped): untyped =
+    let name = cspace.colorspace_name
+    let nameToId = name.colorspace_id
+    check cspace == nameToId
+
+  test "ColorSpaceDB ColorSpaceType* length consistency compile-time check":
+    onEachColorspaceType(lengthCheck)
+
+  test "ColorSpaceDB ColorSpaceType* order consistency compile-time check":
+    onEachColorspaceType(orderCheck)
+
+  test "ColorSpaceDB ColorSpace length consistency compile-time check":
+    onEachColorspaceId(lengthCheck)
+
+  test "ColorSpaceDB ColorSpace length consistency run-time check":
+    for id in testColorSpaceIds: runTimeLengthCheck(id)
+
+  test "ColorSpaceDB ColorSpace order consistency compile-time check":
+    onEachColorspaceId(orderCheck)
+
+  test "ColorSpaceDB ColorSpace order consistency run-time check":
+    for id in testColorSpaceIds: runTimeOrderCheck(id)
+
+  test "ColorSpaceDB ColorSpace to/from string compile-time naming consistency":
+    onEachColorspaceType(nameCheck)
+
+  test "ColorSpaceDB ColorSpace to/from string run-time naming consistency":
+    for id in testColorSpaceIds: runTimeNameCheck(id)
+
+  template echo_props(name, pic: untyped): untyped =
+    echo "Properties of '", name, "':"
+    echo "  colorspace_order: ", pic.colorspace.colorspace_order
+    echo "  colorspace:       ", pic.colorspace
+    echo "  width:            ", pic.width
+    echo "  height:           ", pic.height
+
+  template read_verbose(name, T: untyped): untyped =
+    block:
+      let pic = readImage[T](name)
+      echo_props name, pic
+      pic
+
+  test "IIO/base load test reference image (PNG)":
+    testimg = readImage[byte]("test/sample.png")
+    require_consistency testimg.data
+
+  test "IIO/base getter width, extent, and dataShape consistency":
+    check testimg.width == testimg.extent(1) and testimg.width == testimg.dataShape[1]
+
+  test "IIO/base getter height, extent, and dataShape consistency":
+    check testimg.height == testimg.extent(0) and testimg.height  == testimg.dataShape[0]
+
+  #test "IIO/base interleaved to planar order":
+
+  #test "IIO/base planar and interleaved width consistency":
+  #  img = testimg.planar
+  #  check pla
+
+  test "IIO/base getter colorspace":
+    check testimg.colorspace.colorspace_name == "RGBA"
+
+  test "IIO/base save BMP":
+    check testimg.writeImage("test/samplepng-out2.bmp", SO(format: BMP))
+
+  test "IIO/base load BMP":
+    testimg = readImage[byte]("test/samplepng-out2.bmp")
+    require_consistency testimg.data
+
+  test "IIO/base save PNG":
+    check testimg.writeImage("test/samplepng-out2.png", SO(format: PNG, stride: 0))
+
+  test "IIO/base load PNG":
+    testimg = readImage[byte]("test/samplepng-out2.png")
+    require_consistency testimg.data
+
+  test "IIO/base save JPEG":
+    check testimg.writeImage("test/samplepng-out2.jpeg", SO(format: JPEG, quality: 100))
+
+  test "IIO/base load JPEG":
+    testimg = readImage[byte]("test/samplepng-out2.jpeg")
+    require_consistency testimg.data
+
+  test "IIO/base encode and decode BMP in-memory":
+    let coredata = writeImage(testimg, SO(format: BMP))
+    echo "    # Saved BMP size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
+    let recovered = readImage[byte](coredata)
+    check_consistency testimg.data, recovered.data
+
+  test "IIO/base encode and decode PNG in-memory":
+    let coredata = writeImage(testimg, SO(format: PNG, stride: 0))
+    echo "    # Saved PNG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
+    let recovered = readImage[byte](coredata)
+    check_consistency testimg.data, recovered.data
+
+  test "IIO/base encode and decode JPEG in-memory":
+    let coredata = writeImage(testimg, SO(format: JPEG, quality: 100))
+    echo "    # Saved JPEG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
+    let recovered = readImage[byte](coredata)
+    check_consistency testimg.data, recovered.data
+
+  #test "IIO/base encode and decode HDR in-memory":
+  #  let coredata = writeImage(hdrpic, SO(format: HDR))
+  #  echo "    # Saved HDR size is ", coredata.len.float / 1024.0, "KB"
+  #  let recovered = coredata.imageio_load_hdr_core
+  #  check_consistency hdrpic, recovered
+
+
+  #test "Image LDR I/O (User)":
+  #  let mypic = read_verbose("test/sample.png", byte)
+
+  #  echo "Write BMP from PNG: ",
+  #    
+  #  echo "Write PNG from PNG: ",
+  #    mypic.writeImage("test/samplepng-out2.png", SO(format: PNG, stride: 0))
+  #  echo "Write JPEG from PNG: ",
+  #    mypic.writeImage("test/samplepng-out2.jpeg",
+  #      SO(format: JPEG, quality: 100))
+
+  #  let mypic2 = read_verbose("test/samplepng-out2.bmp", byte)
+
+  #  echo "Write BMP from BMP: ",
+  #    mypic2.writeImage("test/samplebmp-out2.bmp", SO(format: BMP))
+  #  echo "Write PNG from BMP: ",
+  #    mypic2.writeImage("test/samplebmp-out2.png", SO(format: PNG, stride: 0))
+  #  echo "Write JPEG from BMP: ",
+  #    mypic2.writeImage("test/samplebmp-out2.jpeg",
+  #      SO(format: JPEG, quality: 100))
+
+  #  let mypicjpeg = read_verbose("test/samplepng-out2.jpeg", byte)
+
+  #  echo "Write BMP from JPEG: ",
+  #    mypicjpeg.writeImage("test/samplejpeg-out.bmp", SO(format: BMP))
+  #  echo "Write PNG from JPEG: ",
+  #    mypicjpeg.writeImage("test/samplejpeg-out.png",
+  #      SO(format: PNG, stride: 0))
+  #  echo "Write JPEG from JPEG: ",
+  #    mypicjpeg.writeImage("test/samplejpeg-out.jpeg",
+  #      SO(format: JPEG, quality: 100))
 
   #test "Image I/O (Internal)":
   #  # Taken from the isMainModule tests in lerosi.nim
@@ -243,54 +496,6 @@ suite "LERoSI Unit Tests":
   #  echo "Write BMP from second HDR: ",
   #    myhdrpic.imageio_save_core("test/samplehdr2-out.bmp", SO(format: BMP))
 
-  #test "Image LDR I/O (User)":
-  #  let mypic = readImage[byte]("test/sample.png")
-  #  echo "Properties of 'test/sample.png':"
-  #  echo "  storage_order: ", mypic.storage_order
-  #  echo "  colorspace:    ", mypic.colorspace
-  #  echo "  width:         ", mypic.width
-  #  echo "  height:        ", mypic.height
-
-  #  echo "Write BMP from PNG: ",
-  #    mypic.writeImage("test/samplepng-out.bmp", SO(format: BMP))
-  #  echo "Write PNG from PNG: ",
-  #    mypic.writeImage("test/samplepng-out.png", SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from PNG: ",
-  #    mypic.writeImage("test/samplepng-out.jpeg",
-  #      SO(format: JPEG, quality: 100))
-
-  #  let mypic2 = readImage[byte]("test/samplepng-out.bmp")
-  #  echo "Properties of 'test/samplepng-out.bmp':"
-  #  echo "  storage_order: ", mypic2.storage_order
-  #  echo "  colorspace:    ", mypic2.colorspace
-  #  echo "  width:         ", mypic2.width
-  #  echo "  height:        ", mypic2.height
-
-  #  echo "Write BMP from BMP: ",
-  #    mypic2.writeImage("test/samplebmp-out.bmp", SO(format: BMP))
-  #  echo "Write PNG from BMP: ",
-  #    mypic2.writeImage("test/samplebmp-out.png", SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from BMP: ",
-  #    mypic2.writeImage("test/samplebmp-out.jpeg",
-  #      SO(format: JPEG, quality: 100))
-
-  #  let mypicjpeg = readImage[byte]("test/samplepng-out.jpeg")
-  #  echo "Properties of 'test/samplepng-out.jpeg':"
-  #  echo "  storage_order: ", mypicjpeg.storage_order
-  #  echo "  colorspace:    ", mypicjpeg.colorspace
-  #  echo "  width:         ", mypicjpeg.width
-  #  echo "  height:        ", mypicjpeg.height
-
-  #  echo "Write BMP from JPEG: ",
-  #    mypicjpeg.writeImage("test/samplejpeg-out.bmp", SO(format: BMP))
-  #  echo "Write PNG from JPEG: ",
-  #    mypicjpeg.writeImage("test/samplejpeg-out.png",
-  #      SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from JPEG: ",
-  #    mypicjpeg.writeImage("test/samplejpeg-out.jpeg",
-  #      SO(format: JPEG, quality: 100))
-
-  #  echo "Success!"
 
 
   # TODO: Insert new tests.

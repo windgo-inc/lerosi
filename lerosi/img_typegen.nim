@@ -1,6 +1,8 @@
 
+declareNamedFixedSeq("ChannelIndex", int, MAX_IMAGE_CHANNELS)
+
 var
-  enableColorSubspaces    {.compileTime.} = true
+  enableColorSubspaces    {.compileTime.} = false
 
   channelCounter          {.compileTime.} = 0
   channelNames            {.compileTime.} = newSeq[string]()
@@ -38,7 +40,7 @@ proc asColorSpaceCompilerImpl(name: string, channelstr: string = nil):
 
     colorspaceNames.add name
     if channelstr.isNilOrEmpty:
-      colorspaceIndices.add(initFixedSeq[int, MAX_IMAGE_CHANNELS]())
+      colorspaceIndices.add(initChannelIndex())
     else:
       var chindex: ChannelIndex
       chindex.setLen(0)
@@ -98,18 +100,6 @@ proc defineColorSpaceWithAlphaProc(node: string) {.compileTime.} =
 macro defineColorSpaceWithAlpha(node: untyped): untyped =
   let name = nodeToStr(node)
   defineColorSpaceWithAlphaProc(name)
-
-
-template getterPragmaAnyExcept*: untyped =
-  nnkPragma.newTree(
-    ident"inline",
-    ident"noSideEffect")
-
-template getterPragma*(
-    exceptionList: untyped = newNimNode(nnkBracket)): untyped =
-
-  getterPragmaAnyExcept().add(
-    nnkExprColonExpr.newTree(ident"raises", exceptionList))
 
 
 let dollarProcVar {.compileTime.} = nnkAccQuoted.newTree(ident("$"))
@@ -219,8 +209,9 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
     csnamecases = nnkCaseStmt.newTree(ident"cs")
     cschancases = nnkCaseStmt.newTree(ident"cs")
     cschanordercases = nnkCaseStmt.newTree(ident"cs")
+    cschanindexcases = nnkCaseStmt.newTree(ident"cs")
     cschanorderspacecases = nnkCaseStmt.newTree(ident"ch") # NOTE ch instead of cs
-    cschanlencases = nnkCaseStmt.newTree(ident"cs")
+    #cschanlencases = nnkCaseStmt.newTree(ident"cs")
 
   for csid, name in colorspaceNames:
     if skip:
@@ -232,12 +223,12 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
       idname = "ColorSpaceId" & name
       idident = ident(idname)
 
-    var channelSet = newNimNode(nnkCurly)
-    var channelList = newSeq[NimNode]()
+    var channelSet = nnkCurly.newTree
+    var channelOrder = initChannelIndex()
+    var channelList = nnkBracket.newTree
     var channelChecks = newStmtList()
 
     var firstch = true
-    var i: int = -1
     for chid, chname in channelNames:
       if firstch:
         firstch = false
@@ -246,27 +237,51 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
       let
         chident = ident("ChId" & chname)
         chtyp = ident("ChType" & chname)
-        hasch: bool = 0 <= colorspaceIndices[csid].find(chid)
-        chlit = if hasch: ident"true" else: ident"false"
+        idxch = colorspaceIndices[csid].find(chid)
+        hasch: bool = 0 <= idxch
+        chlit = ident(if hasch: "true" else: "false")
+        chord = newLit(idxch)
 
       if hasch:
-        inc i
-
         channelSet.add(chident)
-        channelList.add(chident)
+        channelOrder.add(idxch)
 
         # Build up the index of channel sub-cases
-        cschanorderspacecases.add(nnkOfBranch.newTree(
-          chident,
-          newIntLitNode(i - 1)
-        ))
+        cschanorderspacecases.add(nnkOfBranch.newTree(chident, chord.copy))
         
       
-      let chk = quote do:
-        proc colorspace_has_channel*(T: typedesc[`typ`], U: typedesc[`chtyp`]):
-          bool {.inline, noSideEffect, raises: [].} = `chlit`
+      #let chk = quote do:
+      #  proc colorspace_order*(T: typedesc[`typ`], U: typedesc[`chtyp`]):
+      #    int {.inline, noSideEffect, raises: [].} = `chord`
 
-      chk.copyChildrenTo(channelChecks)
+      #  proc colorspace_has_channel*(T: typedesc[`typ`], U: typedesc[`chtyp`]):
+      #    bool {.inline, noSideEffect, raises: [].} = `chlit`
+
+      #chk.copyChildrenTo(channelChecks)
+
+    
+    block:
+      var thenodes = initFixedSeq[NimNode, MAX_IMAGE_CHANNELS]()
+      for id in channelSet: thenodes.add(id)
+
+      var theindex = initFixedSeq[NimNode, MAX_IMAGE_CHANNELS]()
+      theindex.setLen(channelSet.len)
+
+      for chident, idxch in zip(thenodes, channelOrder):
+        theindex[idxch] = chident
+
+      for x in theindex:
+        channelList.add x
+
+    cschanorderspacecases.add(nnkElse.newTree(newIntLitNode(-1)))
+    var typeorderproc = newProc(nnkPostfix.newTree(ident"*",
+      ident"colorspace_order"), [
+        ident"int",
+        newIdentDefs(ident"cs", nnkBracketExpr.newTree(ident"typedesc", typ)),
+        newIdentDefs(ident"ch", ident"ColorChannel")
+      ])
+    typeorderproc.body = cschanorderspacecases.copy
+    typeorderproc.pragma = getterPragma()
 
     let channelSetLen = newLit(channelSet.len)
     let st = quote do:
@@ -278,32 +293,8 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
       proc `dollarProcVar`*(T: typedesc[`typ`]):
         string {.inline, noSideEffect, raises: [].} = `name`
 
-      proc colorspace_type*(T: typedesc[`typ`]):
-        typedesc[`typ`] {.inline, noSideEffect, raises: [].} = T
-
       proc colorspace_id*(T: typedesc[`typ`]):
         ColorSpace {.inline, noSideEffect, raises: [].} = `idident`
-
-      proc colorspace_channels*(T: typedesc[`typ`]):
-        set[ColorChannel] {.inline, noSideEffect, raises: [].} = `channelSet`
-
-      proc colorspace_len*(T: typedesc[`typ`]):
-        int {.inline, noSideEffect, raises: [].} = `channelSetLen`
-
-      proc colorspace_order*(T: typedesc[`typ`], ColorChannel):
-
-      proc colorspace_has_channel*(T: typedesc[`typ`], ch: ColorChannel):
-          bool {.inline, noSideEffect, raises: [].} =
-        colorspace_channels(T).contains(ch)
-
-      proc colorspace_has_subspace*(
-          T: typedesc[`typ`], subch: set[ColorChannel]):
-          bool {.inline, noSideEffect, raises: [].} =
-
-        for ch in subch:
-          if not colorspace_channels(T).contains(ch):
-            return false
-        return true
 
     st.copyChildrenTo(stmts)
     channelChecks.copyChildrenTo(stmts)
@@ -320,12 +311,13 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
       idident,
       newAssignment(ident"result", channelSet)
     ))
+    cschanindexcases.add nnkOfBranch.newTree(idident, newCall(ident"copyFrom", [ident"result", channelList]))
     cschanordercases.add nnkOfBranch.newTree(idident, cschanorderspacecases)
     cschanorderspacecases = nnkCaseStmt.newTree(ident"ch") # garbage collect old one
-    cschanlencases.add(nnkOfBranch.newTree(
-      idident,
-      newAssignment(ident"result", channelSetLen)
-    ))
+    #cschanlencases.add(nnkOfBranch.newTree(
+    #  idident,
+    #  newAssignment(ident"result", channelSetLen)
+    #))
 
     if first:
       first = false
@@ -336,6 +328,7 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
 
   result = newStmtList()
   result.add(parseStmt("type ColorSpace* = enum " & csenums))
+
   stmts.copyChildrenTo(result)
 
   csidcases.add(newNimNode(nnkElse).add(
@@ -354,25 +347,43 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
         )))))
 
   let addendum = quote do:
-    # Forced compile-time evaluation using generic params and const.
-    proc colorspace_has_subspace_proc*[T; U]:
-        bool {.inline, noSideEffect, raises: [].} =
-      const subchset = colorspace_channels(U)
-      const hassubcs = colorspace_has_subspace(T, subchset)
-      hassubcs
+    proc colorspace_len*[U: typedesc](T: U):
+        int {.inline, noSideEffect, raises: [].} =
+      colorspace_len(T.colorspace_id)
 
-    # Syntax sugar to format it is as an ordinary procedure call.
-    template colorspace_has_subspace*(T, U: untyped): untyped =
-      colorspace_has_subspace_proc[T, U]()
+    proc colorspace_channels*[U: typedesc](T: U):
+        set[ColorChannel] {.inline, noSideEffect, raises: [].} =
+      colorspace_channels(T.colorspace_id)
+
+    proc colorspace_order*[U: typedesc](T: U):
+        FixedSeq[ColorChannel, MAX_IMAGE_CHANNELS]
+        {.inline, noSideEffect, raises: [].} =
+      colorspace_order(T.colorspace_id)
+
+    proc colorspace_order*[U: typedesc](cs: ColorSpace, T: U):
+        int {.inline, noSideEffect, raises: [].} =
+      colorspace_order(cs, T.channel_id)
+
+    proc colorspace_order*[U: typedesc](T: U, ch: ColorChannel):
+        int {.inline, noSideEffect, raises: [].} =
+      colorspace_order(T.colorspace_id, ch)
+
+    proc colorspace_order*[U, W: typedesc](T: U, V: W):
+        int {.inline, noSideEffect, raises: [].} =
+      colorspace_order(T, V.channel_id)
+
 
     proc colorspace_id*(cs: ColorSpace):
-      ColorSpace {.inline, noSideEffect, raises: [].} = cs
-
-    proc `dollarProcVar`*(cs: ColorSpace):
-      string {.inline, noSideEffect, raises: [].} = colorspace_name(cs)
+        ColorSpace {.inline, noSideEffect, raises: [].} =
+      cs
 
     proc colorspace_name*(cs: string):
-      string {.inline, noSideEffect, raises: [].} = cs
+        string {.inline, noSideEffect, raises: [].} =
+      cs
+
+    proc `dollarProcVar`*(cs: ColorSpace):
+        string {.inline, noSideEffect, raises: [].} =
+      colorspace_name(cs)
 
   var idproc = newProc(nnkPostfix.newTree(ident"*", ident"colorspace_id"), [
     ident"ColorSpace",
@@ -395,7 +406,13 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
     ident"colorspace_order"), [
       ident"int",
       newIdentDefs(ident"cs", ident"ColorSpace"),
-      newIdentDefs(ident"ch", ident"ColorChannel"),
+      newIdentDefs(ident"ch", ident"ColorChannel")
+    ])
+
+  var chanindexproc = newProc(nnkPostfix.newTree(ident"*",
+    ident"colorspace_order"), [
+      nnkBracketExpr.newTree(ident"FixedSeq", ident"ColorChannel", newLit(MAX_IMAGE_CHANNELS)),
+      newIdentDefs(ident"cs", ident"ColorSpace")
     ])
 
   var chanlenproc = newProc(nnkPostfix.newTree(ident"*",
@@ -410,16 +427,21 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
   nameproc.body = newStmtList(csnamecases)
   chanproc.body = newStmtList(cschancases)
   chanorderproc.body = newStmtList(cschanordercases)
-  chanlenproc.body = newStmtList(cschanlencases)
+  chanindexproc.body = newStmtList(cschanindexcases)
+  chanlenproc.body = newStmtList().add(
+    newDotExpr(newCall(ident"colorspace_order", [ident"cs"]), ident"len")
+  )
 
   nameproc.pragma = getterPragma()
   chanproc.pragma = getterPragma()
   chanorderproc.pragma = getterPragma()
+  chanindexproc.pragma = getterPragma()
   chanlenproc.pragma = getterPragma()
 
   result.add idproc
   result.add nameproc
   result.add chanproc
+  result.add chanindexproc
   result.add chanorderproc
   result.add chanlenproc
 
@@ -462,7 +484,6 @@ proc makeColorSpaceRefs(): NimNode {.compileTime.} =
 
   result = newStmtList().add(spacesproc)
 
-      
 macro declareColorSpaceMetadata(): untyped =
   result = newStmtList()
   makeChannels().copyChildrenTo(result)

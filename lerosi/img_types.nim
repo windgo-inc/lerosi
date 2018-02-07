@@ -23,12 +23,6 @@ type
 
 include ./img_accessor
 
-macro imageGetter*(targetProc: untyped): untyped =
-  result = imageAccessor(targetProc, false)
-
-macro imageMutator*(targetProc: untyped): untyped =
-  result = imageAccessor(targetProc, true)
-
 proc data*(img: SomeImage): auto {.imageGetter.} = img.dat
 
 proc `data=`*(img: var SomeImage, data: AnyTensor[T]) {.imageMutator.} =
