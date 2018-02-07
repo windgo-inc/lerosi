@@ -33,9 +33,6 @@ proc `data=`*(img: var SomeImage, data: AnyTensor[T]) {.imageMutator.} =
       "New tensor is of shape " & $(data.shape) &
       " but image requires shape " & $(img.dat.shape))
 
-proc inplaceReorder(img: var SomeImage, order: DataOrder) {.imageMutator.} =
-  discard
-
 proc storage_order*(img: SomeImage): DataOrder {.imageGetter.} =
   when isStaticTarget: O else: img.order
 
@@ -62,8 +59,12 @@ template has_dynamic_colorspace*(img: untyped): untyped =
 
 proc `storage_order=`*(img: var DynamicOrderImage, order: DataOrder)
     {.inline, raises: [].} =
-  img.inplaceReorder(order)
-  img.order = order
+  if not (order == img.order):
+    case order:
+      of DataPlanar:      img.dat = rotate_plnr(img.dat)
+      of DataInterleaved: img.dat = rotate_ilvd(img.dat)
+
+    img.order = order
 
 proc `colorspace=`*(img: var SomeImage, cspace: ColorSpace) {.imageMutator.} =
   when not (S is ColorSpaceTypeAny):
