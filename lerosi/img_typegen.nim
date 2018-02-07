@@ -236,10 +236,8 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
 
       let
         chident = ident("ChId" & chname)
-        chtyp = ident("ChType" & chname)
         idxch = colorspaceIndices[csid].find(chid)
         hasch: bool = 0 <= idxch
-        chlit = ident(if hasch: "true" else: "false")
         chord = newLit(idxch)
 
       if hasch:
@@ -283,7 +281,6 @@ proc makeColorSpaces(): NimNode {.compileTime.} =
     typeorderproc.body = cschanorderspacecases.copy
     typeorderproc.pragma = getterPragma()
 
-    let channelSetLen = newLit(channelSet.len)
     let st = quote do:
       type `typ`* = distinct int
 

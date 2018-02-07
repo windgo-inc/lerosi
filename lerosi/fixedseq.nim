@@ -225,7 +225,6 @@ proc declare_named_proc(name, T, length: NimNode): NimNode {.compileTime.} =
     initcalllen = newCall(ident"setLen", [ident"result", ident"le"])
     initcalldat = newCall(ident"copyFrom", [ident"result", ident"dat"])
     typeident = ident(nodeToStr(T))
-    seqtype = nnkBracketExpr.newTree(ident"FixedSeq", typeident, length)
 
   var initleninplaceproc = newProc(
     postfix(initident.copy, "*"),
