@@ -9,11 +9,11 @@ import ./img_conf
 export img_conf
 
 type
-  StaticOrderImage*[T; S; O: static[DataOrder]] = object
+  StaticOrderFrame*[T; S; O: static[DataOrder]] = object
     dat: Tensor[T]
     cspace: ColorSpace
 
-  DynamicOrderImage*[T; S] = object
+  DynamicOrderFrame*[T; S] = object
     dat: Tensor[T]
     cspace: ColorSpace
     order: DataOrder
@@ -40,24 +40,24 @@ proc colorspace*(img: SomeImage): ColorSpace {.imageGetter.} =
   when not (S is ColorSpaceTypeAny): S.colorspace_id
   else: img.cspace
 
-template is_static_ordered*[T: StaticOrderImage](img: T): bool = true
-template is_static_ordered*[T: DynamicOrderImage](img: T): bool = false
+template is_static_ordered*[T: StaticOrderFrame](img: T): bool = true
+template is_static_ordered*[T: DynamicOrderFrame](img: T): bool = false
 
-template is_dynamic_ordered*[T: StaticOrderImage](img: T): bool = false
-template is_dynamic_ordered*[T: DynamicOrderImage](img: T): bool = true
+template is_dynamic_ordered*[T: StaticOrderFrame](img: T): bool = false
+template is_dynamic_ordered*[T: DynamicOrderFrame](img: T): bool = true
 
 template has_static_colorspace*[T; S; O: static[DataOrder]](
-    img: StaticOrderImage[T, S, O]): bool =
+    img: StaticOrderFrame[T, S, O]): bool =
 
   when not (S is ColorSpaceTypeAny): true else: false
 
-template has_static_colorspace*[T; S](img: DynamicOrderImage[T, S]): bool =
+template has_static_colorspace*[T; S](img: DynamicOrderFrame[T, S]): bool =
   when not (S is ColorSpaceTypeAny): true else: false
 
 template has_dynamic_colorspace*(img: untyped): untyped =
   (not has_static_colorspace(img))
 
-proc `storage_order=`*(img: var DynamicOrderImage, order: DataOrder)
+proc `storage_order=`*(img: var DynamicOrderFrame, order: DataOrder)
     {.inline, raises: [].} =
   if not (order == img.order):
     case order:
@@ -164,18 +164,18 @@ proc init_image_storage*(img: var SomeImage,
   img.dat = data
 
 
-proc planar*[T, S](image: StaticOrderImage[T, S, DataPlanar]):
+proc planar*[T, S](image: StaticOrderFrame[T, S, DataPlanar]):
     auto {.inline, noSideEffect, raises: [].} = image
 
-proc planar*[T, S](image: StaticOrderImage[T, S, DataInterleaved]):
-    StaticOrderImage[T, S, DataPlanar] =
+proc planar*[T, S](image: StaticOrderFrame[T, S, DataInterleaved]):
+    StaticOrderFrame[T, S, DataPlanar] =
 
   init_image_storage(result,
     image.colorspace, DataPlanar,
     data = rotate_plnr(image.dat).asContiguous)
 
-proc planar*[T, S](image: DynamicOrderImage[T, S]):
-    DynamicOrderImage[T, S] =
+proc planar*[T, S](image: DynamicOrderFrame[T, S]):
+    DynamicOrderFrame[T, S] =
 
   let
     data = case image.order:
@@ -185,17 +185,19 @@ proc planar*[T, S](image: DynamicOrderImage[T, S]):
     image.colorspace, DataPlanar,
     data = data)
 
-proc interleaved*[T, S](image: StaticOrderImage[T, S, DataPlanar]):
-    StaticOrderImage[T, S, DataInterleaved] =
+proc interleaved*[T, S](image: StaticOrderFrame[T, S, DataPlanar]):
+    StaticOrderFrame[T, S, DataInterleaved] =
 
   init_image_storage(result,
     image.colorspace, DataInterleaved,
     data = rotate_ilvd(image.dat).asContiguous)
 
-proc interleaved*[T, S](image: StaticOrderImage[T, S, DataInterleaved]):
+proc interleaved*[T, S](image: StaticOrderFrame[T, S, DataInterleaved]):
   auto {.inline, noSideEffect, raises: [].} = image
 
-proc interleaved*[T, S](image: DynamicOrderImage[T, S]): DynamicOrderImage[T, S] =
+proc interleaved*[T, S](image: DynamicOrderFrame[T, S]):
+    DynamicOrderFrame[T, S] =
+
   let
     data = case image.order:
       of DataPlanar: rotate_ilvd(image.dat).asContiguous

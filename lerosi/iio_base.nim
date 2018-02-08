@@ -30,19 +30,19 @@ proc wrap_stbi_loadedlayout(channels: int):
       "wrap_stbi_loadedlayout: Channel count must be between 1 and 4.")
 
 
-proc readImage*[T: SomeNumber](filename: string): StaticOrderImage[T, ColorSpaceTypeAny, DataInterleaved] =
+proc readImage*[T: SomeNumber](filename: string): StaticOrderFrame[T, ColorSpaceTypeAny, DataInterleaved] =
   let data = filename.imageio_load_core
   init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 
-proc readImage*[T: SomeNumber](resource: openarray[byte]): StaticOrderImage[T, ColorSpaceTypeAny, DataInterleaved] =
+proc readImage*[T: SomeNumber](resource: openarray[byte]): StaticOrderFrame[T, ColorSpaceTypeAny, DataInterleaved] =
   let data = resource.imageio_load_core
   init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 
-proc readHdrImage*[T: SomeReal](filename: string): StaticOrderImage[T, ColorSpaceTypeAny, DataInterleaved] =
+proc readHdrImage*[T: SomeReal](filename: string): StaticOrderFrame[T, ColorSpaceTypeAny, DataInterleaved] =
   let data = filename.imageio_load_hdr_core
   init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 
-proc readHdrImage*[T: SomeReal](resource: openarray[byte]): StaticOrderImage[T, ColorSpaceTypeAny, DataInterleaved] =
+proc readHdrImage*[T: SomeReal](resource: openarray[byte]): StaticOrderFrame[T, ColorSpaceTypeAny, DataInterleaved] =
   let data = resource.imageio_load_hdr_core
   init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 

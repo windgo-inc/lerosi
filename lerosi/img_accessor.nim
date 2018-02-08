@@ -58,10 +58,10 @@ proc imageAccessor(targetProc: NimNode,
 
   let
     staticVariant = nnkBracketExpr.newTree(
-      ident"StaticOrderImage",
+      ident"StaticOrderFrame",
       ident"T", ident"S", ident"O")
     dynamicVariant = nnkBracketExpr.newTree(
-      ident"DynamicOrderImage",
+      ident"DynamicOrderFrame",
       ident"T", ident"S")
 
   process_params(staticParams, staticVariant)
@@ -69,7 +69,7 @@ proc imageAccessor(targetProc: NimNode,
 
   result = newStmtList()
   
-  # StaticOrderImage procedure
+  # StaticOrderFrame procedure
   result.add nnkProcDef.newTree(
     targetProc[0],
     newEmptyNode(),
@@ -88,7 +88,7 @@ proc imageAccessor(targetProc: NimNode,
     staticBody
   )
 
-  # DynamicOrderImage procedure
+  # DynamicOrderFrame procedure
   result.add nnkProcDef.newTree(
     targetProc[0],
     newEmptyNode(),

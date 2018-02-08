@@ -4,6 +4,7 @@ import typetraits
 import lerosi
 import lerosi/img_permute
 import lerosi/iio_core # we test the internals of IIO from here
+#import lerosi/img
 
 # Nicer alias for save options.
 type
@@ -36,11 +37,11 @@ suite "LERoSI Unit Tests":
     expect_shape: MetadataArray
 
     # IIO/core globals
-    testimg: StaticOrderImage[byte, ColorSpaceTypeAny, DataInterleaved]
+    testimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataInterleaved]
 
-    plnrimg: StaticOrderImage[byte, ColorSpaceTypeAny, DataPlanar]
-    ilvdimg: StaticOrderImage[byte, ColorSpaceTypeAny, DataInterleaved]
-    dynimg: DynamicOrderImage[byte, ColorSpaceTypeAny]
+    plnrimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataPlanar]
+    ilvdimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataInterleaved]
+    dynimg: DynamicOrderFrame[byte, ColorSpaceTypeAny]
 
   test "IIO/core load test reference image (PNG)":
     try:
