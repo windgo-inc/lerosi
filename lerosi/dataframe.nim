@@ -11,33 +11,53 @@ export img_conf
 type
   RWFrameObject*[Backend] = object
     ## Readable and writable concrete frame object,
-    ## intended for inplace manipulation
+    ## intended for inplace manipulation. Does not
+    ## have ordering data.
     dat: Backend
-    ordr: DataOrder
 
   ROFrameObject*[Backend] = object
     ## Read only concrete frame object, intended
-    ## for streaming input interfaces.
+    ## for streaming input interfaces. Does not
+    ## have ordering data.
     dat: Backend
-    ordr: DataOrder
 
   WOFrameObject*[Backend] = object
     ## Write only concrete frame object, intended
-    ## for streaming output interfaces.
+    ## for streaming output interfaces. Does not
+    ## have ordering data
     dat: Backend
+
+  # metainheritance! :)
+  OrderedFrame[FrameType] = object of FrameType
     ordr: DataOrder
+
+  OrderedRWFrameObject*[Backend] = OrderedFrame[RWFrameObject[Backend]]
+    ## Readable and writable concrete frame object,
+    ## intended for inplace manipulation. Carries
+    ## ordering metadata.
+
+  OrderedROFrameObject*[Backend] = OrderedFrame[ROFrameObject[Backend]]
+    ## Read only concrete frame object, intended
+    ## for streaming input interfaces. Carries
+    ## ordering metadata.
+
+  OrderedWOFrameObject*[Backend] = OrderedFrame[WOFrameObject[Backend]]
+    ## Write only concrete frame object, intended
+    ## for streaming output interfaces. Carries
+    ## ordering metadata.
 
 
 proc frame_data*[U: ROFrameObject|RWFrameObject](frame: U): U.Backend =
   ## Frame data accessor for readable data frame objects.
-  frame.dat
+  result = frame.dat
 
 proc frame_data*[U: RWFrameObject](frame: var U): var U.Backend =
   ## Frame data mutable accessor for read-write data frame objects.
-  frame.dat
+  result = frame.dat
 
-proc frame_order*[U: RWFrameObject|ROFrameObject|WOFrameObject](frame: U):
-    DataOrder =
+proc frame_order*
+    [U: OrderedRWFrameObject|OrderedROFrameObject|OrderedWOFrameObject]
+    (frame: U): DataOrder =
   ## Get the ordering of any frame object, including write only frame objects.
   ## This is neccesary to determine what the ordering of the data to write must
   ## be.
@@ -48,7 +68,7 @@ proc `frame_data=`*[U: RWFrameObject|WOFrameObject](frame: var U,
   ## Frame data setter for writable data frames.
   frame.dat = data
 
-proc `frame_order=`*[U: RWFrameObject|WOFrameObject](
+proc `frame_order=`*[U: OrderedRWFrameObject|OrderedWOFrameObject](
     frame: U; order: DataOrder) =
   ## Set the ordering of a writable frame object. Note that this will not
   ## rotate the storage order for any data written; it is the responsibility
