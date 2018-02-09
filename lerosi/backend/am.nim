@@ -14,6 +14,10 @@ type
   AmShape* = MetadataArray
 
 
+proc `==`*[Storage](a, b: AmBackend[Storage]): bool {.inline.} =
+  a.is_init and b.is_init and (a.d == b.d)
+
+
 proc backend_initialized*[Storage](b: AmBackend[Storage]):
     bool {.inline, noSideEffect, raises: [].} =
   
