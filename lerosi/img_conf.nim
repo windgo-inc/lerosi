@@ -30,7 +30,9 @@ type
 include ./img_typegen
 
 # Meta colorspace specifying runtime configuration of colorspaces.
-defineWildcardColorSpace"Any"
+# NOTE : This is no longer used because we use concepts to determine whether
+# or not something has a colorspace.
+#defineWildcardColorSpace"Any"
 
 # Colorspace of solitary alpha channel.
 defineColorSpace"A"
@@ -49,6 +51,6 @@ defineColorSpaceWithAlpha"YpCbCr"
 declareColorSpaceMetadata()
 declareNamedFixedSeq(ChannelMap, ColorChannel, MAX_IMAGE_CHANNELS)
 
-{.deprecated: [ColorSpaceAnyType: ColorSpaceTypeAny].}
+#{.deprecated: [ColorSpaceAnyType: ColorSpaceTypeAny].}
 
 

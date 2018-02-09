@@ -9,6 +9,13 @@ proc nodeToStr*(node: NimNode): string {.compileTime.} =
     else:
       quit "Expected identifier or string as channel layout specifier, but got " & $node & "."
 
+macro stringify*(x: untyped): untyped =
+  result = toStrLit(x)
+
+macro trace_result*(x: untyped): untyped =
+  let name = x.toStrLit
+  result = newCall(bindSym"echo",
+    [newLit"[TRACE] ", name, newLit" -> ", x.copy])
 
 iterator capitalTokenIter*(str: string): string =
   var acc = newStringOfCap(str.len)
