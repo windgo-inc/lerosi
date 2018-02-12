@@ -175,6 +175,20 @@ proc filter*[A: FixedSeq](a: A, f: proc (item: A.T): bool): A {.inline.} =
     if f(a[i]):
       result.add(a[i])
 
+proc find*[A: FixedSeq](a: A, x: A.T): int {.inline.} =
+  result = -1
+  for i in 0..<a.len:
+    if a[i] == x:
+      result = i
+      break
+
+proc contains*[A: FixedSeq](a: A, x: A.T): bool {.inline.} =
+  result = false
+  for i in 0..<a.len:
+    if a[i] == x:
+      result = true
+      break
+
 proc `==`*[A: FixedSeq](a: A, s: openarray[A.T]): bool {.inline.} =
   if a.len != s.len:
     return false
@@ -213,8 +227,10 @@ proc concat*[A: FixedSeq](dsas: varargs[A]): A =
 # William Whitacre 2018/02/02
 proc join*[A: FixedSeq](fixseq: A, x: string = ""): string =
   result = ""
-  for i in 0..<fixseq.len:
+  for i in 0..<fixseq.len - 1:
     result.add $(fixseq[i])
+    result.add x
+  result.add $(fixseq[fixseq.len-1])
 
 
 proc declare_named_proc(name, T, length: NimNode): NimNode {.compileTime.} =

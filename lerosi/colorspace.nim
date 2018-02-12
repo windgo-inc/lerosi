@@ -3,7 +3,7 @@ import arraymancer
 
 # TODO: Update this and rename for the purpose of channel mapping facilities.
 #       Explore methodologies which might enable an in-place swizzle.
-#       Explore colorspace conversions using broadcasted operators in order
+#       Explore channelspace conversions using broadcasted operators in order
 #       to maximize exploitation of the backend's batching and caching, in
 #       recognition that more than one backend will ultimately be required.
 

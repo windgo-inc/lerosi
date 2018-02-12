@@ -11,14 +11,54 @@ import ./backend/am
 export img_conf, dataframe
 
 type
+  ChannelLayout* = object
+    cspace: ChannelSpace
+    mapping: ChannelMap
+
+  ChannelLayoutOption* = enum
+    LayoutWithAlpha,
+    LayoutReversed
+
   RawImageObject*[Frame] = object
     fr: Frame
 
   DynamicImageObject*[Frame] = object
-    cspace: ColorSpace
-    mapping: ChannelMap
+    layout: ChannelLayout
     fr: Frame
 
+
+proc initChannelLayout(cs: ChannelSpace, opt: set[ChannelLayoutOption] = {}):
+    ChannelLayout {.inline, noSideEffect, raises: [].} =
+  ## Initialize a channel layout object.
+  result.cspace = cs
+  result.mapping = channelspace_order(cs)
+  if not opt.contains(LayoutWithAlpha):
+    dec result.mapping.len
+  if opt.contains(LayoutReversed):
+    result.mapping = result.mapping.reversed
+
+proc initChannelLayout(cs: ChannelSpace; m: ChannelMap; opt: set[ChannelLayoutOption] = {}):
+    ChannelLayout {.inline, noSideEffect, raises: [].} =
+  ## Initialize a channel layout object 
+  when compileOption("boundChecks"):
+    assert(m.len <= channelspace_len(cs))
+    for ch in m:
+      assert(channelspace_channels(cs).contains(ch))
+
+  result.cspace = cs
+  result.mapping = m
+  #if opt.contains(LayoutWithAlpha) and m.contains(ChannelIdIdAlpha):
+  #  dec result.mapping.len
+
+proc `mapping=`*[ImgObj: DynamicImageObject](layout: var ChannelLayout, m: ChannelMap)
+    {.inline, noSideEffect, raises: [].} =
+  ## Get the channel mapping
+  when compileOption("boundChecks"):
+    assert(m.len <= channelspace_len(layout.channelspace))
+
+  layout.mapping = m
+
+  
 
 proc data_frame*
     [ImgObj: RawImageObject|DynamicImageObject](
@@ -35,12 +75,12 @@ proc data_frame*
 proc mapping*[ImgObj: DynamicImageObject](img: ImgObj):
     ChannelMap {.inline, noSideEffect, raises: [].} =
   ## Get the channel mapping
-  img.mapping
+  img.layout.mapping
 
-proc colorspace*[ImgObj: DynamicImageObject](img: ImgObj):
-    ColorSpace {.inline, noSideEffect, raises: [].} =
+proc channelspace*[ImgObj: DynamicImageObject](img: ImgObj):
+    ChannelSpace {.inline, noSideEffect, raises: [].} =
   ## Get the channel mapping
-  img.cspace
+  img.layout.cspace
 
 
 type
@@ -77,7 +117,7 @@ type
 
   StructuredImage*[Frame] = concept img
     img is BaseImage[Frame]
-    img.colorspace is ColorSpace
+    img.channelspace is ChannelSpace
     img.mapping is ChannelMap
 
   UnstructuredImage*[Frame] = concept img
@@ -85,19 +125,18 @@ type
     not (img is StructuredImage[Frame])
 
 
-proc `colorspace=`*[ImgObj: DynamicImageObject](
-    img: var ImgObj, cs: ColorSpace) {.inline, noSideEffect, raises: [].} =
+proc `channelspace=`*[ImgObj: DynamicImageObject](
+    img: var ImgObj, cs: ChannelSpace) {.inline, noSideEffect, raises: [].} =
   ## Get the channel mapping
-  img.cspace = cs
-  img.mapping = colorspace_order(cs)
+  img.layout = initChannelLayout(cs)
 
 proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
     {.inline, noSideEffect, raises: [].} =
   ## Get the channel mapping
   when compileOption("boundChecks"):
-    assert(m.len <= colorspace_len(img.colorspace))
+    assert(m.len <= channelspace_len(img.channelspace))
 
-  img.mapping = m
+  img.layout.mapping = m
 
 
 when isMainModule:
@@ -109,13 +148,13 @@ when isMainModule:
     stdout.write "Getters for "
     trace_result(type(img1).name)
     
-    img1.colorspace = cs
+    img1.channelspace = cs
 
-    trace_result(img1.colorspace)
+    trace_result(img1.channelspace)
     trace_result(img1.mapping)
 
-  do_dynamic_layout_props_tests(ColorSpaceIdRGB)
-  do_dynamic_layout_props_tests(ColorSpaceIdYpCbCr)
+  do_dynamic_layout_props_tests(ChannelSpaceIdRGB)
+  do_dynamic_layout_props_tests(ChannelSpaceIdYpCbCr)
 
 
 

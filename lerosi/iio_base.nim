@@ -5,22 +5,22 @@ import ./img_types
 import ./iio_core
 import ./fixedseq
 #import ./channels
-#import ./colorspace
+#import ./channelspace
 
 const
   loaded_channel_layouts = [
-    ColorSpaceIdYp, ColorSpaceIdYpA,
-    ColorSpaceIdRGB, ColorSpaceIdRGBA
+    ChannelSpaceIdYp, ChannelSpaceIdYpA,
+    ChannelSpaceIdRGB, ChannelSpaceIdRGBA
   ]
 
 
 proc wrap_stbi_loadedlayout_ranged(channels: range[1..4]):
-    ColorSpace {.noSideEffect, inline, raises: [].} =
+    ChannelSpace {.noSideEffect, inline, raises: [].} =
   loaded_channel_layouts[channels - 1]
 
 
 proc wrap_stbi_loadedlayout(channels: int):
-    ColorSpace {.noSideEffect, inline.} =
+    ChannelSpace {.noSideEffect, inline.} =
 
   if channels >= 1 and channels <= 4:
     # Compiler has proof that channels is in range by getting here.
@@ -30,19 +30,19 @@ proc wrap_stbi_loadedlayout(channels: int):
       "wrap_stbi_loadedlayout: Channel count must be between 1 and 4.")
 
 
-proc readImage*[T: SomeNumber](filename: string): StaticOrderFrame[T, ColorSpaceTypeAny, DataInterleaved] =
+proc readImage*[T: SomeNumber](filename: string): StaticOrderFrame[T, ChannelSpaceTypeAny, DataInterleaved] =
   let data = filename.imageio_load_core
   init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 
-proc readImage*[T: SomeNumber](resource: openarray[byte]): StaticOrderFrame[T, ColorSpaceTypeAny, DataInterleaved] =
+proc readImage*[T: SomeNumber](resource: openarray[byte]): StaticOrderFrame[T, ChannelSpaceTypeAny, DataInterleaved] =
   let data = resource.imageio_load_core
   init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 
-proc readHdrImage*[T: SomeReal](filename: string): StaticOrderFrame[T, ColorSpaceTypeAny, DataInterleaved] =
+proc readHdrImage*[T: SomeReal](filename: string): StaticOrderFrame[T, ChannelSpaceTypeAny, DataInterleaved] =
   let data = filename.imageio_load_hdr_core
   init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 
-proc readHdrImage*[T: SomeReal](resource: openarray[byte]): StaticOrderFrame[T, ColorSpaceTypeAny, DataInterleaved] =
+proc readHdrImage*[T: SomeReal](resource: openarray[byte]): StaticOrderFrame[T, ChannelSpaceTypeAny, DataInterleaved] =
   let data = resource.imageio_load_hdr_core
   init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
 

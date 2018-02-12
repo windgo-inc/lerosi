@@ -22,7 +22,7 @@ type
     DataInterleaved,
     DataPlanar
 
-  #ColorSpaceAnyType* = distinct int
+  #ChannelSpaceAnyType* = distinct int
   IIOError* = object of Exception
 
 
@@ -30,22 +30,36 @@ type
 include ./img_typegen
 
 # Colorspace of solitary alpha channel.
-defineColorSpace"A"
+defineChannelSpace"A"
 
 # Colorspaces with optional alpha channel.
-defineColorSpaceWithAlpha"Y"
-defineColorSpaceWithAlpha"Yp"
-defineColorSpaceWithAlpha"RGB"
-defineColorSpaceWithAlpha"CMYe"
-defineColorSpaceWithAlpha"HSV"
-defineColorSpaceWithAlpha"YCbCr"
-defineColorSpaceWithAlpha"YpCbCr"
+defineChannelSpaceWithAlpha"Y"
+defineChannelSpaceWithAlpha"Yp"
+defineChannelSpaceWithAlpha"RGB"
+defineChannelSpaceWithAlpha"CMYe"
+defineChannelSpaceWithAlpha"HSV"
+defineChannelSpaceWithAlpha"YCbCr"
+defineChannelSpaceWithAlpha"YpCbCr"
 
 # Instantiate the image types and compile-time property getters.
 #expandMacros:
-declareColorSpaceMetadata()
-declareNamedFixedSeq(ChannelMap, ColorChannel, MAX_IMAGE_CHANNELS)
+declareChannelSpaceMetadata()
+declareNamedFixedSeq(ChannelMap, ChannelId, MAX_IMAGE_CHANNELS)
 
-#{.deprecated: [ColorSpaceAnyType: ColorSpaceTypeAny].}
+{.deprecated: [
+  colorspace_len: len,
+  colorspace_channels: channels,
+  colorspace_order: order,
+  colorspace_id: id,
+  colorspace_name: name,
+  channel_get_colorspaces: channelspaces,
+
+  channelspace_len: len,
+  channelspace_channels: channels,
+  channelspace_order: order,
+  channelspace_id: id,
+  channelspace_name: name,
+  channel_get_channelspaces: channelspaces
+].}
 
 

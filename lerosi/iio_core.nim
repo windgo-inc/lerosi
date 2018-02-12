@@ -3,7 +3,7 @@ import imghdr, arraymancer
 
 import ./img_types
 import ./fixedseq
-#import ./colorspace
+#import ./channelspace
 
 import stb_image/read as stbi
 import stb_image/write as stbiw
