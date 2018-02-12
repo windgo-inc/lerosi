@@ -15,9 +15,9 @@ type
     fr: Frame
 
   DynamicImageObject*[Frame] = object
-    fr: Frame
     cspace: ColorSpace
     mapping: ChannelMap
+    fr: Frame
 
 
 proc data_frame*
@@ -37,24 +37,10 @@ proc mapping*[ImgObj: DynamicImageObject](img: ImgObj):
   ## Get the channel mapping
   img.mapping
 
-proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
-    {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping
-  when compileOption("boundChecks"):
-    assert(m.len == colorspace_len(img.colorspace))
-
-  img.mapping = m
-
 proc colorspace*[ImgObj: DynamicImageObject](img: ImgObj):
     ColorSpace {.inline, noSideEffect, raises: [].} =
   ## Get the channel mapping
   img.cspace
-
-proc `colorspace=`*[ImgObj: DynamicImageObject](
-    img: var ImgObj, cs: ColorSpace) {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping
-  img.cspace = cs
-  img.mapping = colorspace_order(cs)
 
 
 type
@@ -69,16 +55,25 @@ type
     img is BaseImage[Frame]
     img.data_frame is UnorderedDataFrame
 
+  WriteOnlyImage*[Frame] = concept img
+    img is BaseImage[Frame]
+    img.data_frame is WriteOnlyDataFrame
+
   WritableImage*[Frame] = concept img
     img is BaseImage[Frame]
     img.data_frame is WriteDataFrame
+
+  ReadOnlyImage*[Frame] = concept img
+    img is BaseImage[Frame]
+    img.data_frame is ReadOnlyDataFrame
 
   ReadableImage*[Frame] = concept img
     img is BaseImage[Frame]
     img.data_frame is ReadDataFrame
 
   MutableImage*[Frame] = concept img
-    img is WritableImage and img is ReadableImage
+    img is WritableImage[Frame]
+    img is ReadableImage[Frame]
 
   StructuredImage*[Frame] = concept img
     img is BaseImage[Frame]
@@ -88,6 +83,21 @@ type
   UnstructuredImage*[Frame] = concept img
     img is BaseImage[Frame]
     not (img is StructuredImage[Frame])
+
+
+proc `colorspace=`*[ImgObj: DynamicImageObject](
+    img: var ImgObj, cs: ColorSpace) {.inline, noSideEffect, raises: [].} =
+  ## Get the channel mapping
+  img.cspace = cs
+  img.mapping = colorspace_order(cs)
+
+proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
+    {.inline, noSideEffect, raises: [].} =
+  ## Get the channel mapping
+  when compileOption("boundChecks"):
+    assert(m.len <= colorspace_len(img.colorspace))
+
+  img.mapping = m
 
 
 when isMainModule:
@@ -104,7 +114,7 @@ when isMainModule:
     trace_result(img1.colorspace)
     trace_result(img1.mapping)
 
-  do_dynamic_layout_props_tests(ColorSpaceIdRGBA)
+  do_dynamic_layout_props_tests(ColorSpaceIdRGB)
   do_dynamic_layout_props_tests(ColorSpaceIdYpCbCr)
 
 

@@ -29,11 +29,6 @@ type
 # Type generating macros are kept seperately.
 include ./img_typegen
 
-# Meta colorspace specifying runtime configuration of colorspaces.
-# NOTE : This is no longer used because we use concepts to determine whether
-# or not something has a colorspace.
-#defineWildcardColorSpace"Any"
-
 # Colorspace of solitary alpha channel.
 defineColorSpace"A"
 

@@ -54,11 +54,15 @@ proc asColorSpaceCompilerImpl(name: string, channelstr: string = nil):
     result = colorspaceNames.find(name)
 
 
-proc asAnyColorSpaceCompiler(name: string): int {.compileTime.} =
-  asColorSpaceCompilerImpl(name=name, channelstr=nil)
+#proc asAnyColorSpaceCompiler(name: string): int {.compileTime.} =
+#  asColorSpaceCompilerImpl(name=name, channelstr=nil)
 
 proc asSingleColorSpaceCompiler(channelstr: string): int {.compileTime.} =
   asColorSpaceCompilerImpl(name=channelstr, channelstr=channelstr)
+
+
+proc asSingleColorSpaceWithAlphaCompiler(channelstr: string): int {.compileTime.} =
+  asColorSpaceCompilerImpl(name=channelstr, channelstr=channelstr&"A")
 
 
 proc asColorSpaceCompilerImpl(
@@ -67,15 +71,32 @@ proc asColorSpaceCompilerImpl(
 
   result = asSingleColorSpaceCompiler(channelseq.join)
 
-  if enableColorSubspaces:
-    var oddOut: string = nil
-    if count > 1:
-      for i in 0..<count:
-        oddOut = channelseq[i]
-        delete(channelseq, i)
+  #if enableColorSubspaces:
+  #  var oddOut: string = nil
+  #  if count > 1:
+  #    for i in 0..<count:
+  #      oddOut = channelseq[i]
+  #      delete(channelseq, i)
 
-        discard asColorSpaceCompilerImpl(channelseq, count - 1)
-        insert(channelseq, oddOut, i)
+  #      discard asColorSpaceCompilerImpl(channelseq, count - 1)
+  #      insert(channelseq, oddOut, i)
+
+
+proc asColorSpaceWithAlphaCompilerImpl(
+    channelseq: var FixedSeq[string, MAX_IMAGE_CHANNELS], count: int):
+    int {.compileTime.} =
+
+  result = asSingleColorSpaceWithAlphaCompiler(channelseq.join)
+
+  #if enableColorSubspaces:
+  #  var oddOut: string = nil
+  #  if count > 1:
+  #    for i in 0..<count:
+  #      oddOut = channelseq[i]
+  #      delete(channelseq, i)
+
+  #      discard asColorSpaceCompilerImpl(channelseq, count - 1)
+  #      insert(channelseq, oddOut, i)
 
 
 proc asColorSpaceCompiler(channelstr: string): int {.compileTime.} =
@@ -85,17 +106,27 @@ proc asColorSpaceCompiler(channelstr: string): int {.compileTime.} =
   inc properColorspaceCounter
 
 
-macro defineWildcardColorSpace(node: untyped): untyped =
-  let name = nodeToStr(node)
-  discard asAnyColorSpaceCompiler(name)
+proc asColorSpaceWithAlphaCompiler(channelstr: string): int {.compileTime.} =
+  var channelseq: FixedSeq[string, MAX_IMAGE_CHANNELS]
+  copyFrom(channelseq, capitalTokens(channelstr))
+  result = asColorSpaceWithAlphaCompilerImpl(channelseq, channelseq.len)
+  inc properColorspaceCounter
+
+
+#macro defineWildcardColorSpace(node: untyped): untyped =
+#  let name = nodeToStr(node)
+#  discard asAnyColorSpaceCompiler(name)
+
+proc defineColorSpaceProc(node: string) {.compileTime.} =
+  discard asColorSpaceCompiler(node)
   
 macro defineColorSpace(node: untyped): untyped =
   let name = nodeToStr(node)
-  discard asColorSpaceCompiler(name)
+  defineColorSpaceProc(name)
 
 proc defineColorSpaceWithAlphaProc(node: string) {.compileTime.} =
-  discard asColorSpaceCompiler(node)
-  discard asColorSpaceCompiler(node & "A")
+  #discard asColorSpaceCompiler(node)
+  discard asColorSpaceWithAlphaCompiler(node)
 
 macro defineColorSpaceWithAlpha(node: untyped): untyped =
   let name = nodeToStr(node)
