@@ -9,25 +9,24 @@ import ./img_conf
 export img_conf
 
 type
-  RWFrameObject*[Backend] = object
+  RWFrameObject*[Backend] = object of RootObj
     ## Readable and writable concrete frame object,
     ## intended for inplace manipulation. Does not
     ## have ordering data.
     dat: Backend
 
-  ROFrameObject*[Backend] = object
+  ROFrameObject*[Backend] = object of RootObj
     ## Read only concrete frame object, intended
     ## for streaming input interfaces. Does not
     ## have ordering data.
     dat: Backend
 
-  WOFrameObject*[Backend] = object
+  WOFrameObject*[Backend] = object of RootObj
     ## Write only concrete frame object, intended
     ## for streaming output interfaces. Does not
     ## have ordering data
     dat: Backend
 
-  # metainheritance! :)
   OrderedFrame[FrameType] = object of FrameType
     ordr: DataOrder
 
@@ -55,9 +54,7 @@ proc frame_data*[U: RWFrameObject](frame: var U): var U.Backend =
   ## Frame data mutable accessor for read-write data frame objects.
   result = frame.dat
 
-proc frame_order*
-    [U: OrderedRWFrameObject|OrderedROFrameObject|OrderedWOFrameObject]
-    (frame: U): DataOrder =
+proc frame_order*[U: OrderedFrame](frame: U): DataOrder =
   ## Get the ordering of any frame object, including write only frame objects.
   ## This is neccesary to determine what the ordering of the data to write must
   ## be.
@@ -78,11 +75,11 @@ proc `frame_order=`*[U: OrderedRWFrameObject|OrderedWOFrameObject](
 
 type
   ReadDataFrame*[Backend] = concept frame
-    ## A readable DataFrame, having a frame_data getter yielding a Backend
+    ## A readable DataFrame, having a frame_data getter yielding a Backend.
     frame.frame_data is Backend
 
   WriteDataFrame*[Backend] = concept frame
-    ## A writable DataFrame, having a frame_data setter accepting a Backend
+    ## A writable DataFrame, having a frame_data setter accepting a Backend.
     frame.frame_data = Backend
     
   DataFrame*[Backend] = concept frame
@@ -99,6 +96,16 @@ type
     frame is WriteDataFrame[Backend]
     not (frame is ReadDataFrame[Backend])
 
+  OrderedDataFrame*[Backend] = concept frame
+    ## A data frame with an associated data ordering.
+    frame is DataFrame[Backend]
+    frame.frame_order is DataOrder
+
+  UnorderedDataFrame*[Backend] = concept frame
+    ## A data frame with no associated data ordering.
+    frame is DataFrame[Backend]
+    not (frame is OrderedDataFrame[Backend])
+
 
 
 when isMainModule:
@@ -112,7 +119,7 @@ when isMainModule:
     trace_result(frame is ReadOnlyDataFrame)
     trace_result(frame is WriteOnlyDataFrame)
 
-    var backend: AMBackendCpu[int]
+    var backend: AmBackendCpu[int]
     trace_result(compiles((frame.data)))
     trace_result(compiles((frame.data = backend)))
 

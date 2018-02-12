@@ -1,45 +1,111 @@
-import system, macros, strutils, sequtils
+import macros, sequtils, strutils, tables, future
+import system
 
 import ./macroutil
 import ./fixedseq
-import ./img_types
+import ./dataframe
+import ./img_conf
+
+import ./backend/am
+
+export img_conf, dataframe
+
+type
+  RawImageObject*[Frame] = object
+    fr: Frame
+
+  DynamicImageObject*[Frame] = object
+    fr: Frame
+    cspace: ColorSpace
+    mapping: ChannelMap
+
+
+proc data_frame*
+    [ImgObj: RawImageObject|DynamicImageObject](
+    img: ImgObj): ImgObj.Frame {.inline, noSideEffect, raises: [].} =
+  ## Get the underlying data frame.
+  img.fr
+
+proc data_frame*
+    [ImgObj: RawImageObject|DynamicImageObject](
+    img: var ImgObj): var ImgObj.Frame {.inline, noSideEffect, raises: [].} =
+  ## Get the variable reference to the underlying data frame.
+  img.fr
+
+proc mapping*[ImgObj: DynamicImageObject](img: ImgObj):
+    ChannelMap {.inline, noSideEffect, raises: [].} =
+  ## Get the channel mapping
+  img.mapping
+
+proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
+    {.inline, noSideEffect, raises: [].} =
+  ## Get the channel mapping
+  when compileOption("boundChecks"):
+    assert(m.len == colorspace_len(img.colorspace))
+
+  img.mapping = m
+
+proc colorspace*[ImgObj: DynamicImageObject](img: ImgObj):
+    ColorSpace {.inline, noSideEffect, raises: [].} =
+  ## Get the channel mapping
+  img.cspace
+
+proc `colorspace=`*[ImgObj: DynamicImageObject](
+    img: var ImgObj, cs: ColorSpace) {.inline, noSideEffect, raises: [].} =
+  ## Get the channel mapping
+  img.cspace = cs
+  img.mapping = colorspace_order(cs)
 
 
 type
-  Image*[W; Frame] = object
-    lens: W
-    baseimg: Frame
+  BaseImage*[Frame] = concept img
+    img.data_frame is Frame
 
-  Lens[S]* = object of RootObj
-    cspace: ColorSpace
+  OrderedImage*[Frame] = concept img
+    img is BaseImage[Frame]
+    img.data_frame is OrderedDataFrame
 
-  StaticLens*[S; M: static[ChannelMap]] = object of Lens[S]
+  UnorderedImage*[Frame] = concept img
+    img is BaseImage[Frame]
+    img.data_frame is UnorderedDataFrame
 
-  DynamicLens*[S] = object of Lens[S]
-    mapping: ChannelMap
+  WritableImage*[Frame] = concept img
+    img is BaseImage[Frame]
+    img.data_frame is WriteDataFrame
 
-  StaticOrderImage[W; T; O: static[DataOrder]] = Image[W, StaticOrderFrame[T, W.S, O]]
-  DynamicImage[W; T] = Image[W, DynamicOrderFrame[T, W.S]]
+  ReadableImage*[Frame] = concept img
+    img is BaseImage[Frame]
+    img.data_frame is ReadDataFrame
 
+  MutableImage*[Frame] = concept img
+    img is WritableImage and img is ReadableImage
 
-proc mapping*[S](lens: DynamicLens[S]):
-  ChannelMap {.inline, noSideEffect, raises: [].} = lens.mapping
+  StructuredImage*[Frame] = concept img
+    img is BaseImage[Frame]
+    img.colorspace is ColorSpace
+    img.mapping is ChannelMap
 
-proc mapping*[S, M](lens: StaticLens[S, M]):
-  ChannelMap {.inline, noSideEffect, raises: [].} = M
-
-proc colorspace*[S](lens: DynamicLens[S]):
-    ColorSpace {.inline, noSideEffect, raises: [].} =
-  when S is ColorSpaceTypeAny: lens.cspace else: S
-
-proc colorspace*[S, M](lens: StaticLens[S, M]):
-    ColorSpace {.inline, noSideEffect, raises: [].} =
-  when S is ColorSpaceTypeAny: lens.cspace else: S
-
-
-#proc init_image[W; FrameType](image: var Image[]):
+  UnstructuredImage*[Frame] = concept img
+    img is BaseImage[Frame]
+    not (img is StructuredImage[Frame])
 
 
-#proc init_image*[]
+when isMainModule:
+  import typetraits
+  import ./backend/am
+
+  template do_dynamic_layout_props_tests(cs: untyped): untyped =
+    var img1: DynamicImageObject[OrderedRWFrameObject[AmBackendCpu[byte]]]
+    stdout.write "Getters for "
+    trace_result(type(img1).name)
+    
+    img1.colorspace = cs
+
+    trace_result(img1.colorspace)
+    trace_result(img1.mapping)
+
+  do_dynamic_layout_props_tests(ColorSpaceIdRGBA)
+  do_dynamic_layout_props_tests(ColorSpaceIdYpCbCr)
+
 
 
