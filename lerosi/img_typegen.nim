@@ -390,10 +390,6 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
         ChannelSpace {.inline, noSideEffect, raises: [].} =
       cs
 
-    proc name*(cs: string):
-        string {.inline, noSideEffect, raises: [].} =
-      cs
-
   var dollarproc = newProc(nnkPostfix.newTree(ident"*", dollarProcVar), [
     ident"string",
     newIdentDefs(ident"cs", ident"ChannelSpace")
