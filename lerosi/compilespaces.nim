@@ -2,13 +2,11 @@
 declareNamedFixedSeq("ChannelIndex", int, MAX_IMAGE_CHANNELS)
 
 var
-  #enableColorSubspaces    {.compileTime.} = false
-
   channelCounter          {.compileTime.} = 0
   channelNames            {.compileTime.} = newSeq[string]()
   channelMemberSpaces      {.compileTime.} = newSeq[seq[int]]()
 
-  properColorspaceCounter {.compileTime.} = 0
+  properChannelspaceCounter {.compileTime.} = 0
   # Counting only full channelspaces, not partial subspaces such as RB or CbCr.
 
   channelspaceCounter       {.compileTime.} = 0
@@ -34,6 +32,8 @@ proc asChannelCompiler(name: string): int {.compileTime.} =
 proc asChannelSpaceCompilerImpl(name: string, channelstr: string = nil):
     int {.compileTime.} =
 
+  echo "Compiling channelspace \"", name, "\" with channels \"", channelstr, "\"."
+
   if not channelspaceNames.contains(name):
     inc(channelspaceCounter)
     result = channelspaceCounter
@@ -54,83 +54,44 @@ proc asChannelSpaceCompilerImpl(name: string, channelstr: string = nil):
     result = channelspaceNames.find(name)
 
 
-#proc asAnyChannelSpaceCompiler(name: string): int {.compileTime.} =
-#  asChannelSpaceCompilerImpl(name=name, channelstr=nil)
 
-proc asSingleChannelSpaceCompiler(channelstr: string): int {.compileTime.} =
-  asChannelSpaceCompilerImpl(name=channelstr, channelstr=channelstr)
-
-
-proc asSingleChannelSpaceWithAlphaCompiler(channelstr: string): int {.compileTime.} =
-  asChannelSpaceCompilerImpl(name=channelstr, channelstr=channelstr&"A")
-
-
-proc asChannelSpaceCompilerImpl(
-    channelseq: var FixedSeq[string, MAX_IMAGE_CHANNELS], count: int):
-    int {.compileTime.} =
-
-  result = asSingleChannelSpaceCompiler(channelseq.join)
-
-  #if enableColorSubspaces:
-  #  var oddOut: string = nil
-  #  if count > 1:
-  #    for i in 0..<count:
-  #      oddOut = channelseq[i]
-  #      delete(channelseq, i)
-
-  #      discard asChannelSpaceCompilerImpl(channelseq, count - 1)
-  #      insert(channelseq, oddOut, i)
-
-
-proc asChannelSpaceWithAlphaCompilerImpl(
-    channelseq: var FixedSeq[string, MAX_IMAGE_CHANNELS], count: int):
-    int {.compileTime.} =
-
-  result = asSingleChannelSpaceWithAlphaCompiler(channelseq.join)
-
-  #if enableColorSubspaces:
-  #  var oddOut: string = nil
-  #  if count > 1:
-  #    for i in 0..<count:
-  #      oddOut = channelseq[i]
-  #      delete(channelseq, i)
-
-  #      discard asChannelSpaceCompilerImpl(channelseq, count - 1)
-  #      insert(channelseq, oddOut, i)
+proc asAnyChannelSpaceCompiler(name: string): int {.compileTime.} =
+  asChannelSpaceCompilerImpl(name=name, channelstr=nil)
 
 
 proc asChannelSpaceCompiler(channelstr: string): int {.compileTime.} =
-  var channelseq: FixedSeq[string, MAX_IMAGE_CHANNELS]
-  copyFrom(channelseq, capitalTokens(channelstr))
-  result = asChannelSpaceCompilerImpl(channelseq, channelseq.len)
-  inc properColorspaceCounter
+  asChannelSpaceCompilerImpl(
+    name = channelstr,
+    channelstr = channelstr)
 
 
-proc asChannelSpaceWithAlphaCompiler(channelstr: string): int {.compileTime.} =
-  var channelseq: FixedSeq[string, MAX_IMAGE_CHANNELS]
-  copyFrom(channelseq, capitalTokens(channelstr))
-  result = asChannelSpaceWithAlphaCompilerImpl(channelseq, channelseq.len)
-  inc properColorspaceCounter
+proc asChannelSpaceExtCompiler(channelstr: string, extstr: string): int {.compileTime.} =
+  asChannelSpaceCompilerImpl(
+    name = channelstr,
+    channelstr = channelstr & extstr)
 
 
-#macro defineWildcardChannelSpace(node: untyped): untyped =
-#  let name = nodeToStr(node)
-#  discard asAnyChannelSpaceCompiler(name)
+proc defineAnyChannelSpaceProc(channelstr: string) {.compileTime.} =
+  discard asAnyChannelSpaceCompiler(channelstr)
+  
+macro defineAnyChannelSpace(node: untyped): untyped =
+  defineAnyChannelSpaceProc(nodeToStr(node))
 
-proc defineChannelSpaceProc(node: string) {.compileTime.} =
-  discard asChannelSpaceCompiler(node)
+proc defineChannelSpaceProc(channelstr: string) {.compileTime.} =
+  discard asChannelSpaceCompiler(channelstr)
   
 macro defineChannelSpace(node: untyped): untyped =
-  let name = nodeToStr(node)
-  defineChannelSpaceProc(name)
+  defineChannelSpaceProc(nodeToStr(node))
 
-proc defineChannelSpaceWithAlphaProc(node: string) {.compileTime.} =
-  #discard asChannelSpaceCompiler(node)
-  discard asChannelSpaceWithAlphaCompiler(node)
+proc defineChannelSpaceExtProc(channelstr: string, channelstrext: string) {.compileTime.} =
+  discard asChannelSpaceExtCompiler(channelstr, channelstrext)
 
-macro defineChannelSpaceWithAlpha(node: untyped): untyped =
-  let name = nodeToStr(node)
-  defineChannelSpaceWithAlphaProc(name)
+macro defineChannelSpaceExt(ext, node: untyped): untyped =
+  defineChannelSpaceExtProc(nodeToStr(node), nodeToStr(ext))
+
+# TODO: Remove.
+macro defineChannelSpaceWithAlpha(node: untyped): untyped {.deprecated.} =
+  defineChannelSpaceExtProc(nodeToStr(node), "A")
 
 
 let dollarProcVar {.compileTime.} = nnkAccQuoted.newTree(ident("$"))
@@ -195,7 +156,7 @@ proc makeChannels(): NimNode {.compileTime.} =
           newIdentNode(!"&"),
           nnkInfix.newTree(
             newIdentNode(!"&"),
-            newLit("No such color channel named \""),
+            newLit("No such channel named \""),
             newIdentNode(!"ch")
           ),
           newLit("\".")
@@ -510,6 +471,6 @@ macro declareChannelSpaceMetadata(): untyped =
   let finalmsg = quote do:
     static:
       echo "Supporting ", channelspaceCounter, " channelspaces of which ",
-        properColorspaceCounter, " are full channelspaces."
+        properChannelspaceCounter, " are full channelspaces."
   finalmsg.copyChildrenTo(result)
 

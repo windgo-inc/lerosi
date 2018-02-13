@@ -9,6 +9,7 @@ const
 type
   ImageFormat* = enum
     PNG, BMP, JPEG, HDR
+
   SaveOptions* = ref object
     case format*: ImageFormat
     of PNG:
@@ -33,17 +34,19 @@ include ./compilespaces
 defineChannelSpace"A"
 
 # Colorspaces with optional alpha channel.
-defineChannelSpaceWithAlpha"Y"
-defineChannelSpaceWithAlpha"Yp"
-defineChannelSpaceWithAlpha"RGB"
-defineChannelSpaceWithAlpha"CMYe"
-defineChannelSpaceWithAlpha"HSV"
-defineChannelSpaceWithAlpha"YCbCr"
-defineChannelSpaceWithAlpha"YpCbCr"
+defineChannelSpaceExt("A", "Y")
+defineChannelSpaceExt("A", "Yp")
+defineChannelSpaceExt("A", "RGB")
+defineChannelSpaceExt("A", "CMYe")
+defineChannelSpaceExt("A", "HSV")
+defineChannelSpaceExt("A", "YCbCr")
+defineChannelSpaceExt("A", "YpCbCr")
 
-defineChannelSpace"Mono"
-defineChannelSpace"LRLfe"
-defineChannelSpace"LfRfLbRbLfe"
+# Basic placeholder audiospaces (mono, stero, quadrophonic) with optional
+# LFE channel (low frequency effects).
+defineChannelSpaceExt("Lfe", "Mono")
+defineChannelSpaceExt("Lfe", "LR")
+defineChannelSpaceExt("Lfe", "LfRfLbRb")
 
 # Instantiate the image types and compile-time property getters.
 #expandMacros:

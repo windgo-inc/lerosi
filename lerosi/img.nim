@@ -33,7 +33,7 @@ proc initChannelLayout(cs: ChannelSpace, opt: set[ChannelLayoutOption] = {}):
   result.cspace = cs
   result.mapping = order(cs)
   if not opt.contains(LayoutWithAlpha):
-    dec result.mapping.len
+    discard result.mapping.remove(ChIdA)
   if opt.contains(LayoutReversed):
     result.mapping = result.mapping.reversed
 
@@ -42,8 +42,8 @@ proc initChannelLayout(cs: ChannelSpace; m: ChannelMap):
   ## Initialize a channel layout object 
   when compileOption("boundChecks"):
     assert(m.len <= len(cs))
-    for ch in m:
-      assert(channels(cs).contains(ch))
+    let chs = cs.channels
+    for ch in m: assert(chs.contains(ch))
 
   result.cspace = cs
   result.mapping = m

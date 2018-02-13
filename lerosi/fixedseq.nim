@@ -182,6 +182,11 @@ proc find*[A: FixedSeq](a: A, x: A.T): int {.inline.} =
       result = i
       break
 
+proc remove*[A: FixedSeq](a: var A, x: A.T): int {.inline, discardable.} =
+  let i = a.find(x)
+  if 0 <= i: a.delete(i)
+  result = i
+
 proc contains*[A: FixedSeq](a: A, x: A.T): bool {.inline.} =
   result = false
   for i in 0..<a.len:
