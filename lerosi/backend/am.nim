@@ -7,8 +7,8 @@ type
     d: Storage
 
   AmBackendCpu*[T] = AmBackend[Tensor[T]]
-  AmBackendCuda*[T] = AmBackend[CudaTensor[T]]
-  # Not ready yet
+  # Waiting for opencl, cuda, cpu conversion procs.
+  #AmBackendCuda*[T] = AmBackend[CudaTensor[T]]
   #AmBackendCL*[T] = AmBackend[ClTensor[T]]
 
   AmShape* = MetadataArray
@@ -25,8 +25,11 @@ proc backend_initialized*[Storage](b: AmBackend[Storage]):
 
 template asis(d, s: untyped): untyped = d
 template ascpu[T](d: seq[T], s: AmShape): Tensor[T] = d.toTensor().reshape(s)
-template ascuda[T](d: seq[T], s: AmShape): CudaTensor[T] = d.as_cpu_data(s).cuda
+
+# Waiting for opencl, cuda, cpu conversion procs.
+#template ascuda[T](d: seq[T], s: AmShape): CudaTensor[T] = d.as_cpu_data(s).cuda
 #template asocl[T](d: seq[T], s: AmShape): ClTensor[T] = d.as_cpu_data(s).opencl
+#
 template initraw(fn, b, d, s: untyped): untyped =
   b.d = fn(d, s)
   b.is_init = true
@@ -39,8 +42,9 @@ proc backend_data*[Storage](b: var AmBackend[Storage], d: Storage):
 proc backend_data_raw*[T](b: var AmBackendCpu[T], d: seq[T], s: AmShape):
     var AmBackendCpu[T] {.discardable, inline.} = initraw(ascpu, b, d, s)
 
-proc backend_data_raw*[T](b: var AmBackendCuda[T], d: seq[T], s: AmShape):
-    var AmBackendCuda[T] {.discardable, inline.} = initraw(ascuda, b, d, s)
+# Waiting for opencl, cuda, cpu conversion procs.
+#proc backend_data_raw*[T](b: var AmBackendCuda[T], d: seq[T], s: AmShape):
+#    var AmBackendCuda[T] {.discardable, inline.} = initraw(ascuda, b, d, s)
 
 #proc backend_data_raw*[T](b: var AmBackendCL[T], d: seq[T], s: AmShape):
 #    var AmBackendCL[T] {.inline.} = initraw(asocl, b, d, s)
@@ -86,45 +90,67 @@ import ./am/am_storageorder
 import ./am/am_slicing
 
 type
-  AmBackendNotCpu* = concept backend
-    backend is AmBackend
-    not (backend is AmBackendCpu)
+  AmBackendGeneral*[T] = concept backend
+    backend is AmBackendCpu[T] #or
+    #  backend is AmBackendCuda[T]
 
-  AmBackendNotCuda* = concept backend
-    backend is AmBackend
-    not (backend is AmBackendCuda)
+  AmBackendNotCpu*[T] = concept backend
+    backend is AmBackendGeneral[T]
+    not (backend is AmBackendCpu[T])
 
-  AmBackendNotCL* = concept backend
-    backend is AmBackend
-    #not (backend is AmBackendCL)
+  #AmBackendNotCuda*[T] = concept backend
+  #  backend is AmBackendGeneral[T]
+  #  not (backend is AmBackendCuda[T])
 
-template backend_local_source(dest, src: untyped): untyped =
+  #AmBackendNotCL*[T] = concept backend
+  #  backend is AmBackend
+  #  #not (backend is AmBackendCL)
+
+template backend_local_source(T, U, dest, src: untyped): untyped =
   src.backend_data_check
   when (T is U) and (U is T):
     dest.d = src.d
   else:
     dest.d = src.d.asType(T)
 
-proc backend_source*[T; U](dest: var AmBackendCpu[T], src: AmBackendCpu[U]) =
-  backend_local_source(dest, src)
-
-proc backend_source*[T; U](dest: var AmBackendCuda[T], src: AmBackendCuda[U]) =
-  backend_local_source(dest, src)
-
-#proc backend_source*[T; U](dest: var AmBackendCL[T], src: AmBackendCL[U]) =
-#  backend_local_source(dest, src)
-
-proc backend_source*[T](dest: var AmBackendCpu[T], src: AmBackendNotCpu) =
+template backend_local_source(dest, src, fmap: untyped): untyped =
   src.backend_data_check
-  dest.d = src.d.reshape(src.d.data.shape).asType(T).cpu
+  when dest.d is CudaTensor:
+    # As of 0.3.0, CudaTensor does not support inlined mapping.
+    dest.d = src.d.map(fmap)
+  else:
+    dest.d = map_inline(src.d):
+      fmap(x)
 
-proc backend_source*[T](dest: var AmBackendCuda[T], src: AmBackendNotCuda) =
-  src.backend_data_check
-  dest.d = src.d.reshape(src.d.data.shape).asType(T).cuda
+macro implement_backend_source(kind, notkind, conv: untyped): untyped =
+  result = quote do:
+    proc backend_source*[T; U](
+        dest: var `kind`[T];
+        src: `kind`[U]) =
+      backend_local_source(T, U, dest, src)
+    proc backend_source*[T; U](
+        dest: var `kind`[T];
+        src: `kind`[U]; fmap: proc (x: U): T) =
+      backend_local_source(dest, src, fmap)
+    proc backend_source*[T; U](
+        dest: var `kind`[T];
+        src: `notkind`[U]) =
+      src.backend_data_check
+      dest.d = `conv`(src.d).reshape(src.d.data.shape).asType(T)
+    proc backend_source*[T; U](
+        dest: var `kind`[T];
+        src: `notkind`[U]; fmap: proc (x: U): T) =
+      src.backend_data_check
+      dest.d = `conv`(src.d).reshape(src.d.data.shape).asType(T)
+
+proc to_storage_cpu_detail[T](ct: CudaTensor[T]): Tensor[T] {.inline.} =
+  ct.data.toTensor()
   
-#proc backend_source*[T](dest: var AmBackendCL[T], src: AmBackendNotCL) =
-#  src.backend_data_check
-#  dest.d = src.d.reshape(src.d.data.shape).asType(T).opencl
+
+#implement_backend_source(AmBackendCpu, AmBackendNotCpu, cpu)
+implement_backend_source(AmBackendCpu, AmBackendNotCpu, to_storage_cpu_detail)
+#implement_backend_source(AmBackendCuda, AmBackendNotCuda, cuda)
+#implement_backend_source(AmBackendCL, AmBackendNotCL, opencl)
 
 export am_storageorder, am_slicing
 
