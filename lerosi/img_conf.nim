@@ -31,22 +31,29 @@ type
 import ./compilespaces
 
 # Colorspace of solitary alpha channel.
-defineChannelSpace"A"
+defineChannelSpace("Video", "A")
 
 # Colorspaces with optional alpha channel.
-defineChannelSpaceExt("A", "Y")
-defineChannelSpaceExt("A", "Yp")
-defineChannelSpaceExt("A", "RGB")
-defineChannelSpaceExt("A", "CMYe")
-defineChannelSpaceExt("A", "HSV")
-defineChannelSpaceExt("A", "YCbCr")
-defineChannelSpaceExt("A", "YpCbCr")
+defineChannelSpaceExt("Video", "A", "Y")
+defineChannelSpaceExt("Video", "A", "Yp")
+defineChannelSpaceExt("Video", "A", "RGB")
+defineChannelSpaceExt("Video", "A", "CMYe")
+defineChannelSpaceExt("Video", "A", "HSV")
+defineChannelSpaceExt("Video", "A", "YCbCr")
+defineChannelSpaceExt("Video", "A", "YpCbCr")
+
+# Printer colorspaces.
+defineChannelSpace("Print", "K")
+defineChannelSpace("Print", "CMYeK")
+
+# Audiospace of solitary LFE channel.
+defineChannelSpace("Audio", "Lfe")
 
 # Basic placeholder audiospaces (mono, stero, quadrophonic) with optional
 # LFE channel (low frequency effects).
-defineChannelSpaceExt("Lfe", "Mono")
-defineChannelSpaceExt("Lfe", "LeftRight")
-defineChannelSpaceExt("Lfe", "LfRfLbRb")
+defineChannelSpaceExt("Audio", "Lfe", "Mono")
+defineChannelSpaceExt("Audio", "Lfe", "LeftRight")
+defineChannelSpaceExt("Audio", "Lfe", "LfRfLbRb")
 
 # Instantiate the image types and compile-time property getters.
 #expandMacros:

@@ -6,74 +6,123 @@ import ./img_conf
 declareNamedFixedSeq("ChannelIndex", int, MAX_IMAGE_CHANNELS)
 
 var
-  channelCounter          {.compileTime.} = 0
-  channelNames            {.compileTime.} = newSeq[string]()
+  # Channelspace namespaces. There is one global namespace with no name
+  # in the case that the prefix field of a channel or channelspace compiler
+  # procedure is not furnished.
+  namespaceCounter         {.compileTime.} = 0
+  namespaceNames           {.compileTime.} = newSeq[string]()
+
+  # Individual channel information. Names are stored with a unique namespace.
+  channelCounter           {.compileTime.} = 0
+  channelNames             {.compileTime.} = newSeq[(string, string)]()
   channelMemberSpaces      {.compileTime.} = newSeq[seq[int]]()
 
-  properChannelspaceCounter {.compileTime.} = 0
-  # Counting only full channelspaces, not partial subspaces such as RB or CbCr.
-
+  # Channelspace information. Names are stored with a unique namespace.
   channelspaceCounter       {.compileTime.} = 0
-  channelspaceNames         {.compileTime.} = newSeq[string]()
+  channelspaceNames         {.compileTime.} = newSeq[(string, string)]()
   channelspaceIndices       {.compileTime.} = newSeq[ChannelIndex]()
 
+  # Final channelspace counter
+  properChannelspaceCounter {.compileTime.} = 0
+
+
 static:
-  channelNames.add("")
+  namespaceNames.add("")
+  channelNames.add(("", ""))
   channelMemberSpaces.add(newSeq[int]())
-  channelspaceNames.add("")
+  channelspaceNames.add(("", ""))
   channelspaceIndices.add(initFixedSeq[int, MAX_IMAGE_CHANNELS]())
 
-proc asChannelCompiler(name: string): int {.compileTime.} =
-  if not channelNames.contains(name):
+
+proc registerNamespace(namespace: string) {.compileTime.} =
+  if not namespaceNames.contains(namespace):
+    inc(namespaceCounter)
+    namespaceNames.add namespace
+
+
+proc asChannelCompiler(name: string, namespace: string): int {.compileTime.} =
+  registerNamespace namespace
+  if not channelNames.contains((name, namespace)):
     inc(channelCounter)
     result = channelCounter
-    channelNames.add name
+    channelNames.add((name, namespace))
     channelMemberSpaces.add(newSeq[int]())
   else:
-    result = channelNames.find(name)
+    result = channelNames.find((name, namespace))
 
 
-proc asChannelSpaceCompilerImpl(name: string, channelstr: string = nil):
+proc asChannelSpaceCompilerImpl(name: string, channelstr: string, namespace: string = ""):
     int {.compileTime.} =
 
-  echo "Compiling channelspace \"", name, "\" with channels \"", channelstr, "\"."
+  let
+    namespaceStr =
+      if namespace.isNilOrEmpty:
+        "Channelspace"
+      else:
+        "In " & namespace & ", channelspace "
 
-  if not channelspaceNames.contains(name):
+  echo namespaceStr, name, " with channels ", channelstr, "."
+
+  registerNamespace namespace
+  if not channelspaceNames.contains((name, namespace)):
     inc(channelspaceCounter)
     result = channelspaceCounter
 
-    channelspaceNames.add name
+    channelspaceNames.add((name, namespace))
     if channelstr.isNilOrEmpty:
       channelspaceIndices.add(initChannelIndex())
     else:
       var chindex: ChannelIndex
       chindex.setLen(0)
       for name in capitalTokenIter(channelstr):
-        let i = name.asChannelCompiler
+        let i = name.asChannelCompiler(namespace)
         chindex.add i
         channelMemberSpaces[i].add(channelspaceCounter)
 
       channelspaceIndices.add chindex
   else:
-    result = channelspaceNames.find(name)
+    result = channelspaceNames.find((name, namespace))
 
 
 
 proc asAnyChannelSpaceCompiler(name: string): int {.compileTime.} =
-  asChannelSpaceCompilerImpl(name=name, channelstr=nil)
+  asChannelSpaceCompilerImpl(
+    name = name,
+    channelstr = nil,
+    namespace = "")
 
 
 proc asChannelSpaceCompiler(channelstr: string): int {.compileTime.} =
   result = asChannelSpaceCompilerImpl(
     name = channelstr,
-    channelstr = channelstr)
+    channelstr = channelstr,
+    namespace = "")
   inc properChannelspaceCounter
 
 
-proc asChannelSpaceExtCompiler(channelstr: string, extstr: string): int {.compileTime.} =
+proc asChannelSpaceCompiler(namespace, channelstr: string): int {.compileTime.} =
   result = asChannelSpaceCompilerImpl(
     name = channelstr,
-    channelstr = channelstr & extstr)
+    channelstr = channelstr,
+    namespace = namespace)
+  inc properChannelspaceCounter
+
+
+proc asChannelSpaceExtCompiler(channelstr, extstr: string):
+    int {.compileTime.} =
+  result = asChannelSpaceCompilerImpl(
+    name = channelstr,
+    channelstr = channelstr & extstr,
+    namespace = "")
+  inc properChannelspaceCounter
+
+
+proc asChannelSpaceExtCompiler(namespace, channelstr, extstr: string):
+    int {.compileTime.} =
+  result = asChannelSpaceCompilerImpl(
+    name = channelstr,
+    channelstr = channelstr & extstr,
+    namespace = namespace)
   inc properChannelspaceCounter
 
 
@@ -86,14 +135,27 @@ macro defineAnyChannelSpace*(node: untyped): untyped =
 proc defineChannelSpaceProc(channelstr: string) {.compileTime.} =
   discard asChannelSpaceCompiler(channelstr)
   
+proc defineChannelSpaceProc(prefix, channelstr: string) {.compileTime.} =
+  discard asChannelSpaceCompiler(prefix, channelstr)
+  
 macro defineChannelSpace*(node: untyped): untyped =
   defineChannelSpaceProc(nodeToStr(node))
 
-proc defineChannelSpaceExtProc(channelstr: string, channelstrext: string) {.compileTime.} =
+macro defineChannelSpace*(prefix, node: untyped): untyped =
+  defineChannelSpaceProc(nodeToStr(prefix), nodeToStr(node))
+
+proc defineChannelSpaceExtProc(channelstr, channelstrext: string) {.compileTime.} =
   discard asChannelSpaceExtCompiler(channelstr, channelstrext)
+
+proc defineChannelSpaceExtProc(prefix, channelstr, channelstrext: string)
+    {.compileTime.} =
+  discard asChannelSpaceExtCompiler(prefix, channelstr, channelstrext)
 
 macro defineChannelSpaceExt*(ext, node: untyped): untyped =
   defineChannelSpaceExtProc(nodeToStr(node), nodeToStr(ext))
+
+macro defineChannelSpaceExt*(prefix, ext, node: untyped): untyped =
+  defineChannelSpaceExtProc(nodeToStr(prefix), nodeToStr(node), nodeToStr(ext))
 
 # TODO: Remove.
 macro defineChannelSpaceWithAlpha*(node: untyped): untyped {.deprecated.} =
@@ -111,24 +173,26 @@ proc makeChannels(): NimNode {.compileTime.} =
     first = true
     skip = true
 
-  for chid, name in channelNames:
+  for chid, pair in channelNames:
+    let (name, namespace) = pair
     if skip:
       skip = false
       continue
 
     let
-      typ = ident("ChType" & name)
-      idname = "ChId" & name
+      typ = ident(namespace & "ChType" & name)
+      chnamestr = namespace & name
+      idname = namespace & "ChId" & name
       idident = ident(idname)
 
     let st = quote do:
       type `typ`* = distinct int
 
       proc name*(T: typedesc[`typ`]):
-        string {.inline, noSideEffect, raises: [].} = `name`
+        string {.inline, noSideEffect, raises: [].} = `chnamestr`
 
       proc `dollarProcVar`*(T: typedesc[`typ`]):
-        string {.inline, noSideEffect, raises: [].} = `name`
+        string {.inline, noSideEffect, raises: [].} = `chnamestr`
 
       proc id*(T: typedesc[`typ`]):
         ChannelId {.inline, noSideEffect, raises: [].} = `idident`
@@ -136,11 +200,11 @@ proc makeChannels(): NimNode {.compileTime.} =
     st.copyChildrenTo(stmts)
 
     chidcases.add(
-      newNimNode(nnkOfBranch).add(newLit(name),
+      newNimNode(nnkOfBranch).add(newLit(chnamestr),
       newAssignment(ident"result", idident)))
     chnamecases.add(newNimNode(nnkOfBranch).add(
       idident,
-      newAssignment(ident"result", newLit(name))))
+      newAssignment(ident"result", newLit(chnamestr))))
 
     if first:
       first = false
@@ -215,14 +279,16 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
     cschanorderspacecases = nnkCaseStmt.newTree(ident"ch") # NOTE ch instead of cs
     #cschanlencases = nnkCaseStmt.newTree(ident"cs")
 
-  for csid, name in channelspaceNames:
+  for csid, pair in channelspaceNames:
+    let (name, namespace) = pair
     if skip:
       skip = false
       continue
 
     let
-      typ = ident("ChannelSpaceType" & name)
-      idname = "ChannelSpaceId" & name
+      typ = ident(namespace & "ChSpaceType" & name)
+      csnamestr = namespace & name
+      idname = namespace & "ChSpace" & name
       idident = ident(idname)
 
     var channelSet = nnkCurly.newTree
@@ -231,13 +297,16 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
     var channelChecks = newStmtList()
 
     var firstch = true
-    for chid, chname in channelNames:
+    for chid, chpair in channelNames:
+      let
+        (chname, chnamespace) = chpair
+
       if firstch:
         firstch = false
         continue
 
       let
-        chident = ident("ChId" & chname)
+        chident = ident(chnamespace & "ChId" & chname)
         idxch = channelspaceIndices[csid].find(chid)
         hasch: bool = 0 <= idxch
         chord = newLit(idxch)
@@ -276,10 +345,10 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
       type `typ`* = distinct int
 
       proc name*(T: typedesc[`typ`]):
-        string {.inline, noSideEffect, raises: [].} = `name`
+        string {.inline, noSideEffect, raises: [].} = `csnamestr`
 
       proc `dollarProcVar`*(T: typedesc[`typ`]):
-        string {.inline, noSideEffect, raises: [].} = `name`
+        string {.inline, noSideEffect, raises: [].} = `csnamestr`
 
       proc id*(T: typedesc[`typ`]):
         ChannelSpace {.inline, noSideEffect, raises: [].} = `idident`
@@ -288,12 +357,12 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
     channelChecks.copyChildrenTo(stmts)
 
     csidcases.add(nnkOfBranch.newTree(
-      newLit(name),
+      newLit(csnamestr),
       newAssignment(ident"result", idident)
     ))
     csnamecases.add(nnkOfBranch.newTree(
       idident,
-      newAssignment(ident"result", newLit(name))
+      newAssignment(ident"result", newLit(csnamestr))
     ))
     cschancases.add(nnkOfBranch.newTree(
       idident,
@@ -437,21 +506,22 @@ proc makeChannelSpaceRefs(): NimNode {.compileTime.} =
     skip = true
     chspacecases = newNimNode(nnkCaseStmt).add(ident"ch")
 
-  for chid, name in channelNames:
+  for chid, pair in channelNames:
+    let (name, namespace) = pair
     if skip:
       skip = false
       continue
 
     let
-      chident = ident("ChId" & name)
+      chident = ident(namespace & "ChId" & name)
 
     let csidseq = channelMemberSpaces[chid]
     var csset = newNimNode(nnkCurly)
 
     for k, csid in csidseq:
       let
-        csname = channelspaceNames[csid]
-        csident = ident("ChannelSpaceId" & csname)
+        (csname, csnamespace) = channelspaceNames[csid]
+        csident = ident(csnamespace & "ChSpace" & csname)
 
       csset.add(csident)
 

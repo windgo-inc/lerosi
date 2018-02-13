@@ -33,7 +33,7 @@ proc initChannelLayout(cs: ChannelSpace, opt: set[ChannelLayoutOption] = {}):
   result.cspace = cs
   result.mapping = order(cs)
   if not opt.contains(LayoutWithAlpha):
-    discard result.mapping.remove(ChIdA)
+    discard result.mapping.remove(VideoChIdA)
   if opt.contains(LayoutReversed):
     result.mapping = result.mapping.reversed
 
@@ -144,6 +144,13 @@ proc layout*[ImgObj: DynamicImageObject](
   img.lay = initChannelLayout(cs, opt)
   result = img
 
+proc layout*[ImgObj: DynamicImageObject](
+    img: var ImgObj, cs: ChannelSpace,
+    m: ChannelMap): var ImgObj {.discardable, inline.} =
+  ## Set the channel
+  img.lay = initChannelLayout(cs, m)
+  result = img
+
 proc `channelspace=`*[ImgObj: DynamicImageObject](
     img: var ImgObj, cs: ChannelSpace)
     {.inline, noSideEffect, raises: [].} =
@@ -170,10 +177,10 @@ when isMainModule:
     trace_result(img1.channelspace)
     trace_result(img1.mapping)
 
-  const constRgba = initChannelLayout(ChannelSpaceIdRGB, {LayoutWithAlpha})
-  const constAbgr = initChannelLayout(ChannelSpaceIdRGB, {LayoutWithAlpha, LayoutReversed})
-  const constRgb = initChannelLayout(ChannelSpaceIdRGB)
-  const constBgr = initChannelLayout(ChannelSpaceIdRGB, {LayoutReversed})
+  const constRgba = initChannelLayout(VideoChSpaceRGB, {LayoutWithAlpha})
+  const constAbgr = initChannelLayout(VideoChSpaceRGB, {LayoutWithAlpha, LayoutReversed})
+  const constRgb = initChannelLayout(VideoChSpaceRGB)
+  const constBgr = initChannelLayout(VideoChSpaceRGB, {LayoutReversed})
 
   template test_channel_layout(stage: string): untyped = 
     echo "Test " & stage & " channel layout:"
@@ -195,8 +202,8 @@ when isMainModule:
 
   test_channel_layout"run-time"
 
-  do_dynamic_layout_props_tests(ChannelSpaceIdRGB)
-  do_dynamic_layout_props_tests(ChannelSpaceIdYpCbCr)
+  do_dynamic_layout_props_tests(VideoChSpaceRGB)
+  do_dynamic_layout_props_tests(VideoChSpaceYpCbCr)
 
 
 
