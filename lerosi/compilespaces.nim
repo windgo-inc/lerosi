@@ -2,11 +2,11 @@
 declareNamedFixedSeq("ChannelIndex", int, MAX_IMAGE_CHANNELS)
 
 var
-  enableColorSubspaces    {.compileTime.} = false
+  #enableColorSubspaces    {.compileTime.} = false
 
   channelCounter          {.compileTime.} = 0
   channelNames            {.compileTime.} = newSeq[string]()
-  channelColorspaces      {.compileTime.} = newSeq[seq[int]]()
+  channelMemberSpaces      {.compileTime.} = newSeq[seq[int]]()
 
   properColorspaceCounter {.compileTime.} = 0
   # Counting only full channelspaces, not partial subspaces such as RB or CbCr.
@@ -17,7 +17,7 @@ var
 
 static:
   channelNames.add("")
-  channelColorspaces.add(newSeq[int]())
+  channelMemberSpaces.add(newSeq[int]())
   channelspaceNames.add("")
   channelspaceIndices.add(initFixedSeq[int, MAX_IMAGE_CHANNELS]())
 
@@ -26,7 +26,7 @@ proc asChannelCompiler(name: string): int {.compileTime.} =
     inc(channelCounter)
     result = channelCounter
     channelNames.add name
-    channelColorspaces.add(newSeq[int]())
+    channelMemberSpaces.add(newSeq[int]())
   else:
     result = channelNames.find(name)
 
@@ -47,7 +47,7 @@ proc asChannelSpaceCompilerImpl(name: string, channelstr: string = nil):
       for name in capitalTokenIter(channelstr):
         let i = name.asChannelCompiler
         chindex.add i
-        channelColorspaces[i].add(channelspaceCounter)
+        channelMemberSpaces[i].add(channelspaceCounter)
 
       channelspaceIndices.add chindex
   else:
@@ -157,13 +157,13 @@ proc makeChannels(): NimNode {.compileTime.} =
     let st = quote do:
       type `typ`* = distinct int
 
-      proc channel_name*(T: typedesc[`typ`]):
+      proc name*(T: typedesc[`typ`]):
         string {.inline, noSideEffect, raises: [].} = `name`
+
       proc `dollarProcVar`*(T: typedesc[`typ`]):
         string {.inline, noSideEffect, raises: [].} = `name`
-      proc channel_type*(T: typedesc[`typ`]):
-        typedesc[`typ`] {.inline, noSideEffect, raises: [].} = T
-      proc channel_id*(T: typedesc[`typ`]):
+
+      proc id*(T: typedesc[`typ`]):
         ChannelId {.inline, noSideEffect, raises: [].} = `idident`
 
     st.copyChildrenTo(stmts)
@@ -202,19 +202,20 @@ proc makeChannels(): NimNode {.compileTime.} =
         )))))
 
   let addendum = quote do:
-    proc channel_id*(ch: ChannelId):
+    proc id*(ch: ChannelId):
       ChannelId {.inline, noSideEffect, raises: [].} = ch
-    proc `dollarProcVar`*(ch: ChannelId):
-      string {.inline, noSideEffect, raises: [].} = channel_name(ch)
-    proc channel_name*(ch: string):
-      string {.inline, noSideEffect, raises: [].} = ch
 
-  var idproc = newProc(nnkPostfix.newTree(ident"*", ident"channel_id"), [
+  var dollarproc = newProc(nnkPostfix.newTree(ident"*", dollarProcVar), [
+    ident"string",
+    newIdentDefs(ident"cs", ident"ChannelId")
+  ])
+
+  var idproc = newProc(nnkPostfix.newTree(ident"*", ident"id"), [
     ident"ChannelId",
     newIdentDefs(ident"ch", ident"string")
   ])
 
-  var nameproc = newProc(nnkPostfix.newTree(ident"*", ident"channel_name"), [
+  var nameproc = newProc(nnkPostfix.newTree(ident"*", ident"name"), [
     ident"string",
     newIdentDefs(ident"ch", ident"ChannelId")
   ])
@@ -222,8 +223,11 @@ proc makeChannels(): NimNode {.compileTime.} =
   idproc.body = newStmtList(chidcases)
   idproc.pragma = getterPragma(newNimNode(nnkBracket).add(ident"ValueError"))
 
-  nameproc.body = newStmtList(chnamecases)
-  nameProc.pragma = getterPragma()
+  nameproc.body = newStmtList(chnamecases.copy)
+  nameproc.pragma = getterPragma()
+
+  dollarproc.body = newStmtList(chnamecases.copy)
+  dollarproc.pragma = getterPragma()
 
   result.add idproc
   result.add nameproc
@@ -375,7 +379,7 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
 
     proc order*[U: typedesc](cs: ChannelSpace, T: U):
         int {.inline, noSideEffect, raises: [].} =
-      order(cs, T.channel_id)
+      order(cs, T.id)
 
     proc order*[U: typedesc](T: U, ch: ChannelId):
         int {.inline, noSideEffect, raises: [].} =
@@ -383,7 +387,7 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
 
     proc order*[U, W: typedesc](T: U, V: W):
         int {.inline, noSideEffect, raises: [].} =
-      order(T, V.channel_id)
+      order(T, V.id)
 
 
     proc id*(cs: ChannelSpace):
@@ -474,7 +478,7 @@ proc makeChannelSpaceRefs(): NimNode {.compileTime.} =
     let
       chident = ident("ChId" & name)
 
-    let csidseq = channelColorspaces[chid]
+    let csidseq = channelMemberSpaces[chid]
     var csset = newNimNode(nnkCurly)
 
     for k, csid in csidseq:

@@ -23,7 +23,7 @@ type
     fr: Frame
 
   DynamicImageObject*[Frame] = object
-    layout: ChannelLayout
+    lay: ChannelLayout
     fr: Frame
 
 
@@ -31,33 +31,40 @@ proc initChannelLayout(cs: ChannelSpace, opt: set[ChannelLayoutOption] = {}):
     ChannelLayout {.inline, noSideEffect, raises: [].} =
   ## Initialize a channel layout object.
   result.cspace = cs
-  result.mapping = channelspace_order(cs)
+  result.mapping = order(cs)
   if not opt.contains(LayoutWithAlpha):
     dec result.mapping.len
   if opt.contains(LayoutReversed):
     result.mapping = result.mapping.reversed
 
-proc initChannelLayout(cs: ChannelSpace; m: ChannelMap; opt: set[ChannelLayoutOption] = {}):
+proc initChannelLayout(cs: ChannelSpace; m: ChannelMap):
     ChannelLayout {.inline, noSideEffect, raises: [].} =
   ## Initialize a channel layout object 
   when compileOption("boundChecks"):
-    assert(m.len <= channelspace_len(cs))
+    assert(m.len <= len(cs))
     for ch in m:
-      assert(channelspace_channels(cs).contains(ch))
+      assert(channels(cs).contains(ch))
 
   result.cspace = cs
   result.mapping = m
-  #if opt.contains(LayoutWithAlpha) and m.contains(ChannelIdIdAlpha):
-  #  dec result.mapping.len
 
-proc `mapping=`*[ImgObj: DynamicImageObject](layout: var ChannelLayout, m: ChannelMap)
+proc channelspace*(layout: ChannelLayout):
+    ChannelSpace {.inline, noSideEffect, raises: [].} =
+  ## Get the channelspace
+  result = layout.cspace
+
+proc mapping*(layout: ChannelLayout):
+    ChannelMap {.inline, noSideEffect, raises: [].} =
+  ## Get the channelspace
+  result = layout.mapping
+
+proc `mapping=`*(layout: var ChannelLayout, m: ChannelMap)
     {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping
+  ## Set the channel mapping
   when compileOption("boundChecks"):
-    assert(m.len <= channelspace_len(layout.channelspace))
+    assert(m.len <= len(layout.channelspace))
 
   layout.mapping = m
-
   
 
 proc data_frame*
@@ -74,13 +81,18 @@ proc data_frame*
 
 proc mapping*[ImgObj: DynamicImageObject](img: ImgObj):
     ChannelMap {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping
-  img.layout.mapping
+  ## Get the channel mapping from the channel layout.
+  img.lay.mapping
 
 proc channelspace*[ImgObj: DynamicImageObject](img: ImgObj):
     ChannelSpace {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping
-  img.layout.cspace
+  ## Get the channel mapping from the channel layout.
+  img.lay.cspace
+
+proc layout*[ImgObj: DynamicImageObject](img: ImgObj):
+    ChannelLayout {.inline, noSideEffect, raises: [].} =
+  ## Get the channel layout.
+  img.lay
 
 
 type
@@ -125,18 +137,23 @@ type
     not (img is StructuredImage[Frame])
 
 
+proc layout*[ImgObj: DynamicImageObject](
+    img: var ImgObj, cs: ChannelSpace,
+    opt: set[ChannelLayoutOption] = {}): var ImgObj {.discardable, inline.} =
+  ## Set the channel
+  img.lay = initChannelLayout(cs, opt)
+  result = img
+
 proc `channelspace=`*[ImgObj: DynamicImageObject](
-    img: var ImgObj, cs: ChannelSpace) {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping
-  img.layout = initChannelLayout(cs)
+    img: var ImgObj, cs: ChannelSpace)
+    {.inline, noSideEffect, raises: [].} =
+  ## Set the channelspace wiuth a default mapping.
+  img.layout(cs, {})
 
 proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
     {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping
-  when compileOption("boundChecks"):
-    assert(m.len <= channelspace_len(img.channelspace))
-
-  img.layout.mapping = m
+  ## Set the channel mapping
+  img.lay.mapping = m
 
 
 when isMainModule:
@@ -152,6 +169,31 @@ when isMainModule:
 
     trace_result(img1.channelspace)
     trace_result(img1.mapping)
+
+  const constRgba = initChannelLayout(ChannelSpaceIdRGB, {LayoutWithAlpha})
+  const constAbgr = initChannelLayout(ChannelSpaceIdRGB, {LayoutWithAlpha, LayoutReversed})
+  const constRgb = initChannelLayout(ChannelSpaceIdRGB)
+  const constBgr = initChannelLayout(ChannelSpaceIdRGB, {LayoutReversed})
+
+  template test_channel_layout(stage: string): untyped = 
+    echo "Test " & stage & " channel layout:"
+    echo "RGB : {LayoutWithAlpha}"
+    echo constRgba.channelspace
+    echo constRgba.mapping
+    echo "RGB : {LayoutWithAlpha, LayoutReversed}"
+    echo constAbgr.channelspace
+    echo constAbgr.mapping
+    echo "RGB : {}"
+    echo constRgb.channelspace
+    echo constRgb.mapping
+    echo "RGB : {LayoutReversed}"
+    echo constBgr.channelspace
+    echo constBgr.mapping
+
+  static:
+    test_channel_layout"compile-time"
+
+  test_channel_layout"run-time"
 
   do_dynamic_layout_props_tests(ChannelSpaceIdRGB)
   do_dynamic_layout_props_tests(ChannelSpaceIdYpCbCr)

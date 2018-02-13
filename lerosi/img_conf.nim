@@ -27,7 +27,7 @@ type
 
 
 # Type generating macros are kept seperately.
-include ./img_typegen
+include ./compilespaces
 
 # Colorspace of solitary alpha channel.
 defineChannelSpace"A"
@@ -40,6 +40,10 @@ defineChannelSpaceWithAlpha"CMYe"
 defineChannelSpaceWithAlpha"HSV"
 defineChannelSpaceWithAlpha"YCbCr"
 defineChannelSpaceWithAlpha"YpCbCr"
+
+defineChannelSpace"Mono"
+defineChannelSpace"LRLfe"
+defineChannelSpace"LfRfLbRbLfe"
 
 # Instantiate the image types and compile-time property getters.
 #expandMacros:
