@@ -1,6 +1,6 @@
 import system, macros, arraymancer
 import ../am # Cyclic reference by design
-import ../../img_conf
+import ../../spaceconf
 
 template call_permute_left(dat: untyped, arity: int): untyped =
   when compileOption("boundChecks"):

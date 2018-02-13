@@ -1,17 +1,16 @@
 import macros, streams, os, system, sequtils, strutils, math, algorithm, future
 import imghdr, arraymancer
 
-import lerosi/img_types
+import lerosi/spaceconf
+import lerosi/spacemeta
 import lerosi/iio_core
-import lerosi/iio_base
+#import lerosi/iio_base
 import lerosi/fixedseq
 
-export img_types, iio_base, fixedseq
+export spaceconf
+#export iio_base
+export fixedseq
 export arraymancer.MetadataArray
-
-# TODO: Full rework.
-#  Colorspaces done.
-# Public interface begin
 
 
 

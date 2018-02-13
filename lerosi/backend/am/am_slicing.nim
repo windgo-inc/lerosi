@@ -1,6 +1,6 @@
 import system, macros, arraymancer
 import ../am
-import ../../img_conf
+import ../../spaceconf
 
 type
   AmSlice*[Storage] = object

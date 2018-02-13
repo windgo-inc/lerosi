@@ -10,38 +10,38 @@ import lerosi/iio_core # we test the internals of IIO from here
 type
   SO = SaveOptions
 
-const testColorSpaceIds = [
-  ColorSpaceIdA,
-  ColorSpaceIdY,
-  ColorSpaceIdYA,
-  ColorSpaceIdYp,
-  ColorSpaceIdYpA,
-  ColorSpaceIdYCbCr,
-  ColorSpaceIdYCbCrA,
-  ColorSpaceIdYpCbCr,
-  ColorSpaceIdYpCbCrA,
-  ColorSpaceIdRGB,
-  ColorSpaceIdRGBA,
-  ColorSpaceIdHSV,
-  ColorSpaceIdHSVA,
-  ColorSpaceIdCMYe,
-  ColorSpaceIdCMYeA
-]
+#const testColorSpaceIds = [
+#  ColorSpaceIdA,
+#  ColorSpaceIdY,
+#  ColorSpaceIdYA,
+#  ColorSpaceIdYp,
+#  ColorSpaceIdYpA,
+#  ColorSpaceIdYCbCr,
+#  ColorSpaceIdYCbCrA,
+#  ColorSpaceIdYpCbCr,
+#  ColorSpaceIdYpCbCrA,
+#  ColorSpaceIdRGB,
+#  ColorSpaceIdRGBA,
+#  ColorSpaceIdHSV,
+#  ColorSpaceIdHSVA,
+#  ColorSpaceIdCMYe,
+#  ColorSpaceIdCMYeA
+#]
 
 suite "LERoSI Unit Tests":
   var
-    # IIO/base globals
+    # IIO/core globals
     testpic_initialized = false
     testpic: Tensor[byte]
     hdrpic: Tensor[cfloat]
     expect_shape: MetadataArray
 
-    # IIO/core globals
-    testimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataInterleaved]
+    # IIO/base globals
+    #testimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataInterleaved]
 
-    plnrimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataPlanar]
-    ilvdimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataInterleaved]
-    dynimg: DynamicOrderFrame[byte, ColorSpaceTypeAny]
+    #plnrimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataPlanar]
+    #ilvdimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataInterleaved]
+    #dynimg: DynamicOrderFrame[byte, ColorSpaceTypeAny]
 
   test "IIO/core load test reference image (PNG)":
     try:
@@ -199,6 +199,7 @@ suite "LERoSI Unit Tests":
     for i in 0..plnrpic.shape[0]-1:
       check plnrpic[i, _].squeeze == testpic[_, _, i].squeeze
 
+#[
   template onEachColorspaceType(fn: untyped): untyped =
     fn(ColorSpaceTypeA)
     fn(ColorSpaceTypeY)
@@ -374,6 +375,7 @@ suite "LERoSI Unit Tests":
     echo "    # Saved JPEG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = readImage[byte](coredata)
     check_consistency testimg.data, recovered.data
+]#
 
   #test "IIO/base encode and decode HDR in-memory":
   #  let coredata = writeImage(hdrpic, SO(format: HDR))

@@ -28,7 +28,7 @@ type
 
 
 # Type generating macros are kept seperately.
-import ./compilespaces
+import ./spacemeta
 
 # Colorspace of solitary alpha channel.
 defineChannelSpace("Video", "A")

@@ -4,11 +4,11 @@ import system
 import ./macroutil
 import ./fixedseq
 import ./dataframe
-import ./img_conf
+import ./spaceconf
 
 import ./backend/am
 
-export img_conf, dataframe
+export spaceconf, dataframe
 
 type
   ChannelLayout* = object

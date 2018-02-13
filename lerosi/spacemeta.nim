@@ -1,7 +1,7 @@
 import system, macros, strutils, sequtils
 import ./macroutil
 import ./fixedseq
-import ./img_conf
+import ./spaceconf
 
 declareNamedFixedSeq("ChannelIndex", int, MAX_IMAGE_CHANNELS)
 

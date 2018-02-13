@@ -4,9 +4,9 @@ import system
 import ./macroutil
 import ./fixedseq
 import ./img_permute
-import ./img_conf
+import ./spaceconf
 
-export img_conf
+export spaceconf
 
 type
   RWFrameObject*[Backend] = object of RootObj
