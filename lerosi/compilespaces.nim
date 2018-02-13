@@ -1,3 +1,7 @@
+import system, macros, strutils, sequtils
+import ./macroutil
+import ./fixedseq
+import ./img_conf
 
 declareNamedFixedSeq("ChannelIndex", int, MAX_IMAGE_CHANNELS)
 
@@ -60,37 +64,39 @@ proc asAnyChannelSpaceCompiler(name: string): int {.compileTime.} =
 
 
 proc asChannelSpaceCompiler(channelstr: string): int {.compileTime.} =
-  asChannelSpaceCompilerImpl(
+  result = asChannelSpaceCompilerImpl(
     name = channelstr,
     channelstr = channelstr)
+  inc properChannelspaceCounter
 
 
 proc asChannelSpaceExtCompiler(channelstr: string, extstr: string): int {.compileTime.} =
-  asChannelSpaceCompilerImpl(
+  result = asChannelSpaceCompilerImpl(
     name = channelstr,
     channelstr = channelstr & extstr)
+  inc properChannelspaceCounter
 
 
 proc defineAnyChannelSpaceProc(channelstr: string) {.compileTime.} =
   discard asAnyChannelSpaceCompiler(channelstr)
   
-macro defineAnyChannelSpace(node: untyped): untyped =
+macro defineAnyChannelSpace*(node: untyped): untyped =
   defineAnyChannelSpaceProc(nodeToStr(node))
 
 proc defineChannelSpaceProc(channelstr: string) {.compileTime.} =
   discard asChannelSpaceCompiler(channelstr)
   
-macro defineChannelSpace(node: untyped): untyped =
+macro defineChannelSpace*(node: untyped): untyped =
   defineChannelSpaceProc(nodeToStr(node))
 
 proc defineChannelSpaceExtProc(channelstr: string, channelstrext: string) {.compileTime.} =
   discard asChannelSpaceExtCompiler(channelstr, channelstrext)
 
-macro defineChannelSpaceExt(ext, node: untyped): untyped =
+macro defineChannelSpaceExt*(ext, node: untyped): untyped =
   defineChannelSpaceExtProc(nodeToStr(node), nodeToStr(ext))
 
 # TODO: Remove.
-macro defineChannelSpaceWithAlpha(node: untyped): untyped {.deprecated.} =
+macro defineChannelSpaceWithAlpha*(node: untyped): untyped {.deprecated.} =
   defineChannelSpaceExtProc(nodeToStr(node), "A")
 
 
@@ -462,7 +468,7 @@ proc makeChannelSpaceRefs(): NimNode {.compileTime.} =
 
   result = newStmtList().add(spacesproc)
 
-macro declareChannelSpaceMetadata(): untyped =
+macro declareChannelSpaceMetadata*: untyped =
   result = newStmtList()
   makeChannels().copyChildrenTo(result)
   makeChannelSpaces().copyChildrenTo(result)

@@ -28,7 +28,7 @@ type
 
 
 # Type generating macros are kept seperately.
-include ./compilespaces
+import ./compilespaces
 
 # Colorspace of solitary alpha channel.
 defineChannelSpace"A"
@@ -45,7 +45,7 @@ defineChannelSpaceExt("A", "YpCbCr")
 # Basic placeholder audiospaces (mono, stero, quadrophonic) with optional
 # LFE channel (low frequency effects).
 defineChannelSpaceExt("Lfe", "Mono")
-defineChannelSpaceExt("Lfe", "LR")
+defineChannelSpaceExt("Lfe", "LeftRight")
 defineChannelSpaceExt("Lfe", "LfRfLbRb")
 
 # Instantiate the image types and compile-time property getters.
