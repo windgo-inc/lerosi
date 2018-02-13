@@ -56,31 +56,33 @@ template backend_data_check(b: untyped): untyped =
         "LERoSI/backend/am - backend data access; data are uninitialized.")
 
 proc backend_data*[Storage](b: AmBackend[Storage]): Storage {.inline.} =
-  b.backend_data_check
+  backend_data_check(b)
   result = b.d
 
 proc backend_data*[Storage](b: var AmBackend[Storage]): var Storage {.inline.} =
-  b.backend_data_check
+  backend_data_check(b)
   result = b.d
 
 proc backend_data_raw*[Storage](b: AmBackend[Storage]): seq[Storage.T] {.inline.} =
-  b.backend_data_check
+  backend_data_check(b)
   result = b.d.data
 
 proc backend_data_raw*[Storage](b: var AmBackend[Storage]):
     var seq[Storage.T] {.inline.} =
 
-  b.backend_data_check
+  backend_data_check(b)
   result = b.d.data
 
 proc backend_data_shape*[Storage](b: var AmBackend[Storage], s: AmShape):
     var AmBackend[Storage] {.discardable, inline.} =
 
-  b.backend_data_check
+  backend_data_check(b)
   b.d = b.d.reshape(s)
 
-proc backend_data_shape*[Storage](b: var AmBackend[Storage]): AmShape =
-  b.backend_data_check
+proc backend_data_shape*[Storage](b: AmBackend[Storage]):
+    AmShape {.inline.} =
+
+  backend_data_check(b)
   result = b.d.shape
 
 # Deferred import resolves a cyclic import. With this, the storageorder
@@ -107,14 +109,14 @@ type
   #  #not (backend is AmBackendCL)
 
 template backend_local_source(T, U, dest, src: untyped): untyped =
-  src.backend_data_check
+  backend_data_check(src)
   when (T is U) and (U is T):
     dest.d = src.d
   else:
     dest.d = src.d.asType(T)
 
 template backend_local_source(dest, src, fmap: untyped): untyped =
-  src.backend_data_check
+  backend_data_check(src)
   when dest.d is CudaTensor:
     # As of 0.3.0, CudaTensor does not support inlined mapping.
     dest.d = src.d.map(fmap)
@@ -126,21 +128,21 @@ macro implement_backend_source(kind, notkind, conv: untyped): untyped =
   result = quote do:
     proc backend_source*[T; U](
         dest: var `kind`[T];
-        src: `kind`[U]) =
+        src: `kind`[U]) {.inline.} =
       backend_local_source(T, U, dest, src)
     proc backend_source*[T; U](
         dest: var `kind`[T];
-        src: `kind`[U]; fmap: proc (x: U): T) =
+        src: `kind`[U]; fmap: proc (x: U): T) {.inline.} =
       backend_local_source(dest, src, fmap)
     proc backend_source*[T; U](
         dest: var `kind`[T];
         src: `notkind`[U]) =
-      src.backend_data_check
+      backend_data_check(src)
       dest.d = `conv`(src.d).reshape(src.d.data.shape).asType(T)
     proc backend_source*[T; U](
         dest: var `kind`[T];
-        src: `notkind`[U]; fmap: proc (x: U): T) =
-      src.backend_data_check
+        src: `notkind`[U]; fmap: proc (x: U): T) {.inline.} =
+      backend_data_check(src)
       dest.d = `conv`(src.d).reshape(src.d.data.shape).asType(T)
 
 proc to_storage_cpu_detail[T](ct: CudaTensor[T]): Tensor[T] {.inline.} =

@@ -2,7 +2,9 @@ import system, strutils, unittest, macros, math
 import typetraits
 
 import lerosi
-import lerosi/img_permute
+#import lerosi/img_permute
+import lerosi/backend/am
+import arraymancer
 import lerosi/iio_core # we test the internals of IIO from here
 #import lerosi/img
 
@@ -32,8 +34,8 @@ suite "LERoSI Unit Tests":
   var
     # IIO/core globals
     testpic_initialized = false
-    testpic: Tensor[byte]
-    hdrpic: Tensor[cfloat]
+    testpic: AmBackendCpu[byte]
+    hdrpic: AmBackendCpu[cfloat]
     expect_shape: MetadataArray
 
     # IIO/base globals
@@ -46,36 +48,36 @@ suite "LERoSI Unit Tests":
   test "IIO/core load test reference image (PNG)":
     try:
       testpic = imageio_load_core("test/sample.png")
-      hdrpic = testpic.asType(cfloat) / 255.0
-      expect_shape = testpic.shape
+      hdrpic.backend_source(testpic, proc (x: byte): cfloat = x.cfloat / 255.0)
+      expect_shape = testpic.backend_data_shape
       testpic_initialized = true
     except:
       testpic_initialized = false
       raise
 
-  template require_equal_extent[T; U](pic: Tensor[T], expectpic: Tensor[U]): untyped =
-    require pic.shape[0..1] == expectpic.shape[0..1]
+  template require_equal_extent[T; U](pic: AmBackendCpu[T], expectpic: AmBackendCpu[U]): untyped =
+    require pic.backend_data_shape[0..1] == expectpic.backend_data_shape[0..1]
 
-  template require_equal_extent[T](pic: Tensor[T]): untyped =
-    require pic.shape[0..1] == testpic.shape[0..1]
+  template require_equal_extent[T](pic: AmBackendCpu[T]): untyped =
+    require pic.backend_data_shape[0..1] == testpic.backend_data_shape[0..1]
 
-  template check_equal_extent[T; U](pic: Tensor[T], expectpic: Tensor[U]): untyped =
-    check pic.shape[0..1] == expectpic.shape[0..1]
+  template check_equal_extent[T; U](pic: AmBackendCpu[T], expectpic: AmBackendCpu[U]): untyped =
+    check pic.backend_data_shape[0..1] == expectpic.backend_data_shape[0..1]
 
-  template check_equal_extent[T](pic: Tensor[T]): untyped =
-    check pic.shape[0..1] == testpic.shape[0..1]
+  template check_equal_extent[T](pic: AmBackendCpu[T]): untyped =
+    check pic.backend_data_shape[0..1] == testpic.backend_data_shape[0..1]
 
-  template require_consistency[T; U](pic: Tensor[T], expectpic: Tensor[U]): untyped =
+  template require_consistency[T; U](pic: AmBackendCpu[T], expectpic: AmBackendCpu[U]): untyped =
     require_equal_extent pic, expectpic
     # TODO: Add a histogram check
 
-  template require_consistency[T](pic: Tensor[T]): untyped =
+  template require_consistency[T](pic: AmBackendCpu[T]): untyped =
     require_consistency pic, testpic
 
-  template check_consistency[T; U](pic: Tensor[T], expectpic: Tensor[U]): untyped =
+  template check_consistency[T; U](pic: AmBackendCpu[T], expectpic: AmBackendCpu[U]): untyped =
     check_equal_extent pic, expectpic
 
-  template check_consistency[T](pic: Tensor[T]): untyped =
+  template check_consistency[T](pic: AmBackendCpu[T]): untyped =
     check_consistency pic, testpic
 
   #template test_jpeg_decades(fn: untyped): untyped =
@@ -89,10 +91,10 @@ suite "LERoSI Unit Tests":
   test "IIO obtained test image":
     require testpic_initialized
   
-  test "Tensor shape equality":
-    require(testpic.shape == expect_shape)
+  test "Backend extent equality":
+    require(testpic.backend_data_shape == expect_shape)
 
-  test "Tensor image extent equality":
+  test "Backend extent identity":
     require_equal_extent testpic
 
   test "IIO/core save BMP":
@@ -112,7 +114,7 @@ suite "LERoSI Unit Tests":
 
   # We want to prevent template explosion; this is a big part of
   # why the high level interface should be preferred.
-  proc do_write_jpeg_test[T](pic: Tensor[T], qual: int): bool =
+  proc do_write_jpeg_test[T](pic: AmBackendCpu[T], qual: int): bool =
     result = testpic.imageio_save_core(
       "test/samplepng-out.q" & $qual & ".jpeg",
       SO(format: JPEG, quality: qual))
@@ -142,11 +144,11 @@ suite "LERoSI Unit Tests":
 
   # We want to prevent template explosion; this is a big part of
   # why the high level interface should be preferred.
-  proc do_read_jpeg_test(qual: int): Tensor[byte] =
+  proc do_read_jpeg_test(qual: int): AmBackendCpu[byte] =
     result = imageio_load_core("test/samplepng-out.q" & $qual & ".jpeg")
 
   # Wrapping imageio_load_core template
-  proc do_read_res_test(res: seq[byte]): Tensor[byte] =
+  proc do_read_res_test(res: seq[byte]): AmBackendCpu[byte] =
     result = imageio_load_core(res)
 
 
@@ -182,6 +184,7 @@ suite "LERoSI Unit Tests":
     let recovered = coredata.imageio_load_hdr_core
     check_consistency hdrpic, recovered
 
+#[
   test "img/permute shift data order explicit arity correctness":
     let plnrpic = rotate_plnr(testpic, 3)
     check plnrpic.shape[1..2] == testpic.shape[0..1]
@@ -199,7 +202,6 @@ suite "LERoSI Unit Tests":
     for i in 0..plnrpic.shape[0]-1:
       check plnrpic[i, _].squeeze == testpic[_, _, i].squeeze
 
-#[
   template onEachColorspaceType(fn: untyped): untyped =
     fn(ColorSpaceTypeA)
     fn(ColorSpaceTypeY)
