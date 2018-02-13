@@ -43,7 +43,7 @@ proc backend_data_raw*[T](b: var AmBackendCuda[T], d: seq[T], s: AmShape):
     var AmBackendCuda[T] {.discardable, inline.} = initraw(ascuda, b, d, s)
 
 #proc backend_data_raw*[T](b: var AmBackendCL[T], d: seq[T], s: AmShape):
-#    var AmBackendCpu[T] {.inline.} = initraw(asocl, b, d, s)
+#    var AmBackendCL[T] {.inline.} = initraw(asocl, b, d, s)
 
 template backend_data_check(b: untyped): untyped =
   when compileOption("boundChecks"):
@@ -84,6 +84,47 @@ proc backend_data_shape*[Storage](b: var AmBackend[Storage]): AmShape =
 # above.
 import ./am/am_storageorder
 import ./am/am_slicing
+
+type
+  AmBackendNotCpu* = concept backend
+    backend is AmBackend
+    not (backend is AmBackendCpu)
+
+  AmBackendNotCuda* = concept backend
+    backend is AmBackend
+    not (backend is AmBackendCuda)
+
+  AmBackendNotCL* = concept backend
+    backend is AmBackend
+    #not (backend is AmBackendCL)
+
+template backend_local_source(dest, src: untyped): untyped =
+  src.backend_data_check
+  when (T is U) and (U is T):
+    dest.d = src.d
+  else:
+    dest.d = src.d.asType(T)
+
+proc backend_source*[T; U](dest: var AmBackendCpu[T], src: AmBackendCpu[U]) =
+  backend_local_source(dest, src)
+
+proc backend_source*[T; U](dest: var AmBackendCuda[T], src: AmBackendCuda[U]) =
+  backend_local_source(dest, src)
+
+#proc backend_source*[T; U](dest: var AmBackendCL[T], src: AmBackendCL[U]) =
+#  backend_local_source(dest, src)
+
+proc backend_source*[T](dest: var AmBackendCpu[T], src: AmBackendNotCpu) =
+  src.backend_data_check
+  dest.d = src.d.reshape(src.d.data.shape).asType(T).cpu
+
+proc backend_source*[T](dest: var AmBackendCuda[T], src: AmBackendNotCuda) =
+  src.backend_data_check
+  dest.d = src.d.reshape(src.d.data.shape).asType(T).cuda
+  
+#proc backend_source*[T](dest: var AmBackendCL[T], src: AmBackendNotCL) =
+#  src.backend_data_check
+#  dest.d = src.d.reshape(src.d.data.shape).asType(T).opencl
 
 export am_storageorder, am_slicing
 
