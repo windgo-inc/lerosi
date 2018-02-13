@@ -1,4 +1,4 @@
-import system, macros, arraymancer
+import system, macros, arraymancer, future
 
 
 type
@@ -85,6 +85,12 @@ proc backend_data_shape*[Storage](b: AmBackend[Storage]):
   backend_data_check(b)
   result = b.d.shape
 
+proc backend_cmp*[AS, BS](a: AmBackend[AS], b: AmBackend[BS]): bool {.inline.} =
+  when (AS is BS) and (BS is AS):
+    result = (a.d.shape == b.d.shape) and (a.d == b.d)
+  else:
+    result = false
+
 # Deferred import resolves a cyclic import. With this, the storageorder
 # and slicing submodules can safely import ../amcpu, and have access to the
 # above.
@@ -108,42 +114,62 @@ type
   #  backend is AmBackend
   #  #not (backend is AmBackendCL)
 
-template backend_local_source(T, U, dest, src: untyped): untyped =
+proc backend_local_source[T; U](
+    dest: var AmBackendCpu[T];
+    src: AmBackendCpu[U]) {.inline.} =
   backend_data_check(src)
   when (T is U) and (U is T):
     dest.d = src.d
   else:
     dest.d = src.d.asType(T)
+  dest.is_init = true
 
-template backend_local_source(dest, src, fmap: untyped): untyped =
+#template backend_local_source(dest, src, fmap: untyped): untyped =
+#  backend_data_check(src)
+#  when dest.d is CudaTensor:
+#    # As of 0.3.0, CudaTensor does not support inlined mapping.
+#    dest.d = src.d.map(fmap)
+#  else:
+#    dest.d = map_inline(src.d):
+#      fmap(x)
+#  dest.is_init = true
+
+# map_inline requires things from arraymancer, and for some reason wrapping
+# it in an inline procedure does not shield the user of lerosi/backend/am
+# from requiring arraymancer. Compiler bug?
+proc backend_local_source[T; U](
+    dest: var AmBackendCpu[T];
+    src: AmBackendCpu[U];
+    fmap: proc (x: U): T) {.inline.} =
+
   backend_data_check(src)
-  when dest.d is CudaTensor:
-    # As of 0.3.0, CudaTensor does not support inlined mapping.
-    dest.d = src.d.map(fmap)
-  else:
-    dest.d = map_inline(src.d):
-      fmap(x)
+  dest.d = newTensorUninit[T](src.backend_data_shape)
+  apply2_inline(dest.d, src.d):
+    fmap(y)
+  dest.is_init = true
 
 macro implement_backend_source(kind, notkind, conv: untyped): untyped =
   result = quote do:
     proc backend_source*[T; U](
         dest: var `kind`[T];
         src: `kind`[U]) {.inline.} =
-      backend_local_source(T, U, dest, src)
+      backend_local_source(dest, src)
     proc backend_source*[T; U](
         dest: var `kind`[T];
         src: `kind`[U]; fmap: proc (x: U): T) {.inline.} =
       backend_local_source(dest, src, fmap)
-    proc backend_source*[T; U](
-        dest: var `kind`[T];
-        src: `notkind`[U]) =
-      backend_data_check(src)
-      dest.d = `conv`(src.d).reshape(src.d.data.shape).asType(T)
-    proc backend_source*[T; U](
-        dest: var `kind`[T];
-        src: `notkind`[U]; fmap: proc (x: U): T) {.inline.} =
-      backend_data_check(src)
-      dest.d = `conv`(src.d).reshape(src.d.data.shape).asType(T)
+    #proc backend_source*[T; U](
+    #    dest: var `kind`[T];
+    #    src: `notkind`[U]) =
+    #  backend_data_check(src)
+    #  dest.d = `conv`(src.d).reshape(src.d.data.shape).asType(T)
+    #  dest.is_init = true
+    #proc backend_source*[T; U](
+    #    dest: var `kind`[T];
+    #    src: `notkind`[U]; fmap: proc (x: U): T) {.inline.} =
+    #  backend_data_check(src)
+    #  dest.d = `conv`(src.d).reshape(src.d.data.shape).asType(T)
+    #  dest.is_init = true
 
 proc to_storage_cpu_detail[T](ct: CudaTensor[T]): Tensor[T] {.inline.} =
   ct.data.toTensor()
@@ -155,4 +181,6 @@ implement_backend_source(AmBackendCpu, AmBackendNotCpu, to_storage_cpu_detail)
 #implement_backend_source(AmBackendCL, AmBackendNotCL, opencl)
 
 export am_storageorder, am_slicing
+export arraymancer
+
 

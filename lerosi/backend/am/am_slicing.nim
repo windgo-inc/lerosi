@@ -33,6 +33,9 @@ template mslicer_interleaved_impl(n, d, x: typed): untyped =
   of 7: d[_, _, _, _, _, _, i] = x.unsqueeze(6)
   else: discard
 
+proc `==`*[B: AmSlice](a, b: B): bool =
+  a.d == b.d
+
 proc slice_channel_planar*[B](b: B, i: int):
     AmSlice[B.Storage] {.inline.} =
 

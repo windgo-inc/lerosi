@@ -1,10 +1,8 @@
-import system, strutils, unittest, macros, math
+import system, strutils, unittest, macros, math, future
 import typetraits
 
 import lerosi
-#import lerosi/img_permute
 import lerosi/backend/am
-import arraymancer
 import lerosi/iio_core # we test the internals of IIO from here
 #import lerosi/img
 
@@ -32,7 +30,7 @@ type
 
 suite "LERoSI Unit Tests":
   var
-    # IIO/core globals
+    # iio_core globals
     testpic_initialized = false
     testpic: AmBackendCpu[byte]
     hdrpic: AmBackendCpu[cfloat]
@@ -45,10 +43,10 @@ suite "LERoSI Unit Tests":
     #ilvdimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataInterleaved]
     #dynimg: DynamicOrderFrame[byte, ColorSpaceTypeAny]
 
-  test "IIO/core load test reference image (PNG)":
+  test "iio_core load test reference image (PNG)":
     try:
       testpic = imageio_load_core("test/sample.png")
-      hdrpic.backend_source(testpic, proc (x: byte): cfloat = x.cfloat / 255.0)
+      hdrpic.backend_source(testpic, x => x.cfloat / 255.0)
       expect_shape = testpic.backend_data_shape
       testpic_initialized = true
     except:
@@ -97,17 +95,17 @@ suite "LERoSI Unit Tests":
   test "Backend extent identity":
     require_equal_extent testpic
 
-  test "IIO/core save BMP":
+  test "iio_core save BMP":
     require testpic.imageio_save_core(
       "test/samplepng-out.bmp",
       SO(format: BMP))
 
-  test "IIO/core save PNG":
+  test "iio_core save PNG":
     require testpic.imageio_save_core(
       "test/samplepng-out.png",
       SO(format: PNG, stride: 0))
 
-  test "IIO/core save JPEG":
+  test "iio_core save JPEG":
     require testpic.imageio_save_core(
       "test/samplepng-out.jpeg",
       SO(format: JPEG, quality: 100))
@@ -119,26 +117,26 @@ suite "LERoSI Unit Tests":
       "test/samplepng-out.q" & $qual & ".jpeg",
       SO(format: JPEG, quality: qual))
 
-  test "IIO/core save JPEG quality parameter coverage":
+  test "iio_core save JPEG quality parameter coverage":
     for qual in countdown(100, 20):
       check do_write_jpeg_test(testpic, qual)
 
-  test "IIO/core save HDR":
+  test "iio_core save HDR":
     check imageio_save_core(hdrpic,
       "test/samplepng-out.hdr",
       SO(format: HDR))
 
   # Loading
 
-  test "IIO/core load BMP":
+  test "iio_core load BMP":
     let inpic = imageio_load_core("test/samplepng-out.bmp")
     check_consistency inpic
     
-  test "IIO/core load PNG":
+  test "iio_core load PNG":
     let inpic = imageio_load_core("test/samplepng-out.png")
     check_consistency inpic
 
-  test "IIO/core load JPEG":
+  test "iio_core load JPEG":
     let inpic = imageio_load_core("test/samplepng-out.jpeg")
     check_consistency inpic
 
@@ -152,56 +150,56 @@ suite "LERoSI Unit Tests":
     result = imageio_load_core(res)
 
 
-  test "IIO/core load JPEG quality parameter coverage":
+  test "iio_core load JPEG quality parameter coverage":
     for qual in countdown(100, 80):
       check_consistency do_read_jpeg_test(qual)
 
-  test "IIO/core load HDR":
+  test "iio_core load HDR":
     let inpic = imageio_load_hdr_core("test/samplepng-out.hdr")
     check_consistency inpic, hdrpic
 
-  test "IIO/core encode and decode BMP in-memory":
+  test "iio_core encode and decode BMP in-memory":
     let coredata = imageio_save_core(testpic, SO(format: BMP))
     echo "    # Saved BMP size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.do_read_res_test
     check_consistency testpic, recovered
 
-  test "IIO/core encode and decode PNG in-memory":
+  test "iio_core encode and decode PNG in-memory":
     let coredata = imageio_save_core(testpic, SO(format: PNG, stride: 0))
     echo "    # Saved PNG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.do_read_res_test
     check_consistency testpic, recovered
 
-  test "IIO/core encode and decode JPEG in-memory":
+  test "iio_core encode and decode JPEG in-memory":
     let coredata = imageio_save_core(testpic, SO(format: JPEG, quality: 100))
     echo "    # Saved JPEG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.do_read_res_test
     check_consistency testpic, recovered
 
-  test "IIO/core encode and decode HDR in-memory":
+  test "iio_core encode and decode HDR in-memory":
     let coredata = imageio_save_core(hdrpic, SO(format: HDR))
     echo "    # Saved HDR size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.imageio_load_hdr_core
     check_consistency hdrpic, recovered
 
+  test "backend rotate storage order correctness":
+    var plnrpic: AmBackendCpu[byte]
+    plnrpic.backend_source testpic
+    plnrpic.backend_rotate DataPlanar
+
+    for i in 0..plnrpic.backend_data_shape[0]-1:
+      check plnrpic.slice_channel_planar(i).slice_data == testpic.slice_channel_interleaved(i).slice_data
+
+    var ilvdpic: AmBackendCpu[byte]
+    ilvdpic.backend_source plnrpic
+    ilvdpic.backend_rotate DataInterleaved
+
+    for i in 0..plnrpic.backend_data_shape[0]-1:
+      check plnrpic.slice_channel_planar(i).slice_data == ilvdpic.slice_channel_interleaved(i).slice_data
+
+    check backend_cmp(ilvdpic, testpic)
+
 #[
-  test "img/permute shift data order explicit arity correctness":
-    let plnrpic = rotate_plnr(testpic, 3)
-    check plnrpic.shape[1..2] == testpic.shape[0..1]
-    for i in 0..plnrpic.shape[0]-1:
-      check plnrpic[i, _].squeeze == testpic[_, _, i].squeeze
-    let ilvdpic = rotate_ilvd(plnrpic, 3)
-    check ilvdpic.shape == testpic.shape
-    check ilvdpic == testpic
-
-  test "img/permute shift data order implicit arity correctness":
-    let plnrpic = rotate_plnr(testpic)
-    check plnrpic.shape[1..2] == testpic.shape[0..1]
-    check plnrpic[0, _].squeeze == testpic[_, _, 0].squeeze
-    let ilvdpic = rotate_ilvd(plnrpic)
-    for i in 0..plnrpic.shape[0]-1:
-      check plnrpic[i, _].squeeze == testpic[_, _, i].squeeze
-
   template onEachColorspaceType(fn: untyped): untyped =
     fn(ColorSpaceTypeA)
     fn(ColorSpaceTypeY)

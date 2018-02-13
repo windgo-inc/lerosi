@@ -16,7 +16,7 @@ skipDirs = @["test"]
 
 task tests, "Running all tests":
   exec "echo 'test/results/'`date +%Y%m%d-%H.%M.%S`'.test.txt' > tmp_filename"
-  exec "cd test && nim c --stackTrace:on --d:lerosiUnitTests=true test_all"
+  exec "cd test && nim c --stackTrace:on --threads:on -d:lerosiUnitTests=true test_all"
   exec "mkdir -p test/results"
   # Pass the results through tty tee and then a color codes stripper that goes to the file.
   # Added utf-8 to ISO-8859-1 conversion for compatibility with enscript
@@ -30,7 +30,7 @@ task tests, "Running all tests":
 
 task bench, "Running benchmarks":
   exec "echo 'test/results/'`date +%Y%m%d-%H.%M.%S`'.benchmark.txt' > tmp_filename"
-  exec "nim c -d:release test/bench_all"
+  exec "nim c -d:release --threads:on test/bench_all"
   exec "mkdir -p test/results"
   # Pass the results through tty tee and then a color codes stripper that goes to the file.
   # Added utf-8 to ISO-8859-1 conversion for compatibility with enscript
