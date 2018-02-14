@@ -3,7 +3,6 @@ import system
 
 import ./macroutil
 import ./fixedseq
-import ./img_permute
 import ./spaceconf
 
 export spaceconf
