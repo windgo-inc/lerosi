@@ -30,10 +30,10 @@ proc imageio_check_format*[T](data: openarray[T]): ImageType =
   testImage(header)
 
 
-template imageio_load_core_impl(resource: untyped): Tensor[byte] =
+template imageio_load_core_bytes_impl(resource: untyped; h, w, ch: var int): seq[byte] =
   ## Load an image from a file or memory
   block:
-    var res: Tensor[byte]
+    var res: seq[byte]
     try:
       # Detect image type.
       let itype = resource.imageio_check_format()
@@ -43,8 +43,7 @@ template imageio_load_core_impl(resource: untyped): Tensor[byte] =
       of imghdr.ImageType.HDR:
         raise newException(IIOError, "LERoSI-IIO: HDR format must be loaded through the image_load_hdr interface.")
       of {imghdr.ImageType.BMP, imghdr.ImageType.PNG, imghdr.ImageType.JPEG}:
-        let desired_ch = 0
-        var w, h, ch: int
+        const desired_ch = 0
 
         # TODO: replace the nim stbi.loadFromMemory procedure with a
         # direct usage of stb_image that forgoes the need of a dynamic
@@ -63,13 +62,7 @@ template imageio_load_core_impl(resource: untyped): Tensor[byte] =
                   let seqResource = @(resource)
                   stbi.loadFromMemory(seqResource.toType(byte), w, h, ch, desired_ch))
 
-      
-        var im1 = newTensorUninit[byte]([h, w, ch])
-        for i, pix in pixels:
-          im1.data[i] = pixels[i]
-        #let im2 = im1.reshape([h, w, ch])
-        res = im1
-        #res = pixels.toTensor().reshape([h, w, ch]).asType(byte)
+        res = pixels
       else:
         raise newException(IIOError, "LERoSI-IIO: Unsupported image format: " & $itype)
 
@@ -82,11 +75,31 @@ template imageio_load_core_impl(resource: untyped): Tensor[byte] =
 
     res
 
-proc imageio_load_core*[T](data: openarray[T]): AmBackendCpu[byte] =
+
+proc imageio_load_core2*[T](data: openarray[T]; h, w, ch: var int): seq[byte] =
+  data.imageio_load_core_bytes_impl(h, w, ch)
+
+
+proc imageio_load_core2*(filename: string, h, w, ch: var int): seq[byte] =
+  filename.imageio_load_core_bytes_impl(h, w, ch)
+
+
+# Forward ported 2018/02/13
+template imageio_load_core_impl(resource: untyped): Tensor[byte] =
+  block:
+    var h, w, ch: int
+    let pixels = imageio_load_core2(resource, h, w, ch)
+    var im1 = newTensorUninit[byte]([h, w, ch])
+    for i in 0..<pixels.len:
+      im1.data[i] = pixels[i]
+    im1
+
+
+proc imageio_load_core*[T](data: openarray[T]): AmBackendCpu[byte] {.deprecated.} =
   result.backend_data(data.imageio_load_core_impl)
 
 
-proc imageio_load_core*(filename: string): AmBackendCpu[byte] =
+proc imageio_load_core*(filename: string): AmBackendCpu[byte] {.deprecated.} =
   result.backend_data(filename.imageio_load_core_impl)
 
 
@@ -128,9 +141,9 @@ proc stbi_image_free(p: pointer) {.importc: "stbi_image_free".}
 
 
 
-template imageio_load_hdr_core_impl(resource: untyped): Tensor[float32] =
+template imageio_load_hdr_core_bytes_impl(resource: untyped; h, w, ch: var int): seq[float32] =
   block:
-    var res: Tensor[float32]
+    var res: seq[float32]
     try:
       # Detect image type.
       let itype = resource.imageio_check_format()
@@ -139,20 +152,24 @@ template imageio_load_hdr_core_impl(resource: untyped): Tensor[float32] =
       if not (itype == imghdr.ImageType.HDR):
         raise newException(IIOError, "LERoSI-IIO-HDR: Not an HDR format - " & $itype)
 
-      let desired_ch = 0
-      var w, h, ch: cint
+      const desired_ch = 0
+      var innerw, innerh, innerch: cint
+      # Translate from cint to int. Come on compiler, you know what to do about this.
 
       let data: ptr cfloat =
         when resource is string:
-          stbi_loadf(resource.cstring, w, h, ch, desired_ch.cint)
+          stbi_loadf(resource.cstring, innerw, innerh, innerch, desired_ch.cint)
         else:
-          stbi_loadf_from_memory(cast[ptr cuchar](resource[0].unsafeAddr), resource.len.cint, w, h, ch, desired_ch.cint)
-      
-      var pixelsOut: seq[cfloat]
-      newSeq(pixelsOut, w*h*ch)
-      copyMem(pixelsOut[0].addr, data, pixelsOut.len * sizeof(cfloat))
+          stbi_loadf_from_memory(
+            cast[ptr cuchar](resource[0].unsafeAddr),
+            resource.len.cint, innerw, innerh, innerch, desired_ch.cint)
 
-      res = pixelsOut.toTensor().reshape([h.int, w, ch]).asType(float32).asContiguous()
+      h = innerh.int
+      w = innerw.int
+      ch = innerch.int
+      
+      newSeq(res, w*h*ch)
+      copyMem(res[0].addr, data, res.len * sizeof(cfloat))
       stbi_image_free(data)
 
     except STBIException:
@@ -164,11 +181,29 @@ template imageio_load_hdr_core_impl(resource: untyped): Tensor[float32] =
 
     res
 
-proc imageio_load_hdr_core*[T](data: openarray[T]): AmBackendCpu[float32] =
-  result.backend_data(data.imageio_load_hdr_core_impl)
 
-proc imageio_load_hdr_core*(filename: string): AmBackendCpu[float32] =
-  result.backend_data(filename.imageio_load_hdr_core_impl)
+proc imageio_load_hdr_core2*[T](data: openarray[T]; h, w, ch: var int): seq[float32] =
+  imageio_load_hdr_core_bytes_impl(data, h, w, ch)
+
+proc imageio_load_hdr_core2*(filename: string; h, w, ch: var int): seq[float32] =
+  imageio_load_hdr_core_bytes_impl(filename, h, w, ch)
+
+
+# Forward ported 2018/02/13
+template imageio_load_hdr_core_impl(resource: untyped): AmBackendCpu[float32] =
+  block:
+    var
+      res: AmBackendCpu[float32]
+      h, w, ch: int
+    let pixels = resource.imageio_load_hdr_core2(h, w, ch)
+    res.backend_data(pixels.toTensor().reshape([h, w, ch]).asType(float32).asContiguous())
+    res
+
+proc imageio_load_hdr_core*[T](data: openarray[T]): AmBackendCpu[float32] {.deprecated.} =
+  imageio_load_hdr_core_impl(data)
+
+proc imageio_load_hdr_core*(filename: string): AmBackendCpu[float32] {.deprecated.} =
+  imageio_load_hdr_core_impl(filename)
 
 
 # NOTE: We replaced width, height, and channel Tensor properties, since at the low level,
@@ -216,35 +251,63 @@ template write_hdr_impl[T](img: Tensor[T]): seq[byte] =
 
 
 # TODO: Merge imageio_save_core variants using a macro.
+# TODO: Rewrite to work with sequences.
+#
+proc imageio_save_core_am[T](img: Tensor[T];
+    filename: string;
+    saveOpt: SaveOptions = SaveOptions(nil)): bool =
 
-proc imageio_save_core*[T](img: AmBackendCpu[T], filename: string, saveOpt: SaveOptions = SaveOptions(nil)): bool =
-  let theOpt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
+  let opt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
 
-  case theOpt.format:
+  case opt.format:
     of BMP:
-      result = img.backend_data().write_img_impl(byte, filename, stbiw.writeBMP)
+      result = img.write_img_impl(byte, filename, stbiw.writeBMP)
     of PNG:
-      result = img.backend_data().write_img_impl(byte, filename, stbiw.writePNG, theOpt.stride)
+      result = img.write_img_impl(byte, filename, stbiw.writePNG, opt.stride)
     of JPEG:
-      result = img.backend_data().write_img_impl(byte, filename, stbiw.writeJPG, theOpt.quality)
+      result = img.write_img_impl(byte, filename, stbiw.writeJPG, opt.quality)
     of HDR:
-      result = img.backend_data().write_hdr_impl(filename)
+      result = img.write_hdr_impl(filename)
     else:
-      raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $theOpt.format & ".")
+      raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $opt.format & ".")
 
 
-proc imageio_save_core*[T](img: AmBackendCpu[T], saveOpt: SaveOptions = SaveOptions(nil)): seq[byte] =
-  let theOpt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
+proc imageio_save_core_am[T](img: Tensor[T];
+    saveOpt: SaveOptions = SaveOptions(nil)): seq[byte] =
 
-  case theOpt.format:
+  let opt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
+
+  case opt.format:
     of BMP:
-      result = img.backend_data().write_img_impl(byte, stbiw.writeBMP)
+      result = img.write_img_impl(byte, stbiw.writeBMP)
     of PNG:
-      result = img.backend_data().write_img_impl(byte, stbiw.writePNG, theOpt.stride)
+      result = img.write_img_impl(byte, stbiw.writePNG, opt.stride)
     of JPEG:
-      result = img.backend_data().write_img_impl(byte, stbiw.writeJPG, theOpt.quality)
+      result = img.write_img_impl(byte, stbiw.writeJPG, opt.quality)
     of HDR:
-      result = img.backend_data().write_hdr_impl()
+      result = img.write_hdr_impl()
     else:
-      raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $theOpt.format & ".")
+      raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $opt.format & ".")
+
+
+proc imageio_save_core*[T](img: AmBackendCpu[T],
+    filename: string,
+    saveOpt: SaveOptions = SaveOptions(nil)): bool {.deprecated.} =
+  imageio_save_core_am(img.backend_data(), filename, saveOpt)
+
+proc imageio_save_core*[T](img: AmBackendCpu[T],
+    saveOpt: SaveOptions = SaveOptions(nil)): seq[byte] {.deprecated.} =
+  imageio_save_core_am(img.backend_data(), saveOpt)
+
+# New interface 2018/02/13
+proc imageio_save_core2*[T](img: seq[T];
+    h, w, ch: int;
+    filename: string;
+    saveOpt: SaveOptions = SaveOptions(nil)): bool =
+  imageio_save_core_am(img.toTensor().reshape([h, w, ch]), filename, saveOpt)
+
+proc imageio_save_core2*[T](img: seq[T];
+    h, w, ch: int;
+    saveOpt: SaveOptions = SaveOptions(nil)): seq[byte] =
+  imageio_save_core_am(img.toTensor().reshape([h, w, ch]), saveOpt)
 
