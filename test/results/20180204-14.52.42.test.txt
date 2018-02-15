@@ -1,0 +1,84 @@
+
+[Suite] LERoSI Unit Tests
+  [OK] IIO decode PNG
+  [OK] IIO obtained test image
+  [OK] Img shape equality test core
+  [OK] IIO encode BMP
+  [OK] IIO encode PNG
+  [OK] IIO encode JPEG(quality=100)
+  [OK] IIO encode JPEG(quality=97)
+  [OK] IIO encode JPEG(quality=95)
+  [OK] IIO encode JPEG(quality=92)
+  [OK] IIO encode JPEG(quality=90)
+  [OK] IIO encode JPEG(quality=87)
+  [OK] IIO encode JPEG(quality=85)
+  [OK] IIO encode JPEG(quality=82)
+  [OK] IIO encode JPEG(quality=80)
+  [OK] IIO encode JPEG(quality=77)
+  [OK] IIO encode JPEG(quality=75)
+  [OK] IIO encode JPEG(quality=72)
+  [OK] IIO encode JPEG(quality=70)
+  [OK] IIO encode JPEG(quality=67)
+  [OK] IIO encode JPEG(quality=65)
+  [OK] IIO encode JPEG(quality=62)
+  [OK] IIO encode JPEG(quality=60)
+  [OK] IIO encode JPEG(quality=57)
+  [OK] IIO encode JPEG(quality=55)
+  [OK] IIO encode JPEG(quality=52)
+  [OK] IIO encode JPEG(quality=50)
+  [OK] IIO encode JPEG(quality=47)
+  [OK] IIO encode JPEG(quality=45)
+  [OK] IIO encode JPEG(quality=42)
+PNG Loaded Shape: [203, 258, 4]
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Write HDR from PNG: true
+BMP Loaded Shape: [203, 258, 3]
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Write HDR from BMP: true
+JPEG Loaded Shape: [203, 258, 3]
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+Write HDR from JPEG: true
+HDR Loaded Shape: [203, 258, 3]
+Write HDR from HDR: true
+Scale for the rest of the formats
+Write BMP from HDR: true
+Write PNG from HDR: true
+Write JPEG from HDR: true
+HDR Loaded Shape: [203, 258, 3]
+Writing HDR to memory to read back.
+Success!
+Scale for the rest of the bitmap test
+Write BMP from second HDR: true
+  [OK] Image I/O (Internal)
+Properties of 'test/sample.png':
+  storage_order: DataInterleaved
+  colorspace:    RGBA
+  width:         258
+  height:        203
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Properties of 'test/samplepng-out.bmp':
+  storage_order: DataInterleaved
+  colorspace:    RGB
+  width:         258
+  height:        203
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Properties of 'test/samplepng-out.jpeg':
+  storage_order: DataInterleaved
+  colorspace:    RGB
+  width:         258
+  height:        203
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+Success!
+  [OK] Image LDR I/O (User)

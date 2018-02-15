@@ -24,7 +24,7 @@ proc backend_initialized*[Storage](b: AmBackend[Storage]):
   b.is_init
 
 template asis(d, s: untyped): untyped = d
-template ascpu[T](d: seq[T], s: AmShape): Tensor[T] = d.toTensor().reshape(s)
+template ascpu[T](d: seq[T], s: untyped): Tensor[T] = d.toTensor().reshape(s)
 
 # Waiting for opencl, cuda, cpu conversion procs.
 #template ascuda[T](d: seq[T], s: AmShape): CudaTensor[T] = d.as_cpu_data(s).cuda
@@ -41,6 +41,11 @@ proc backend_data*[Storage](b: var AmBackend[Storage], d: Storage):
 
 proc backend_data_raw*[T](b: var AmBackendCpu[T], d: seq[T], s: AmShape):
     var AmBackendCpu[T] {.discardable, inline.} = initraw(ascpu, b, d, s)
+
+proc backend_data_raw*[T](b: var AmBackendCpu[T], d: seq[T], s: openarray[int]):
+    var AmBackendCpu[T] {.discardable, inline.} =
+  initraw(ascpu, b, d, s)
+
 
 # Waiting for opencl, cuda, cpu conversion procs.
 #proc backend_data_raw*[T](b: var AmBackendCuda[T], d: seq[T], s: AmShape):

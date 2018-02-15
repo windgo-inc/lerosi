@@ -1,0 +1,154 @@
+
+[Suite] LERoSI Unit Tests
+  [OK] IIO load test reference image (PNG) core implementation
+  [OK] IIO obtained test image
+  [OK] Tensor shape equality
+  [OK] Tensor image extent equality
+  [OK] IIO save BMP core implementation
+  [OK] IIO save PNG core implementation
+  [OK] IIO save JPEG core implementation
+  [OK] IIO save JPEG quality parameter coverage
+  [OK] IIO save HDR core implementation
+  [OK] IIO load BMP core implementation
+  [OK] IIO load PNG core implementation
+  [OK] IIO load JPEG core implementation
+  [OK] IIO load JPEG quality parameter coverage
+  [OK] IIO load HDR core implementation
+    # Saved BMP size is 153.888671875KB
+  [OK] IIO encode/decode BMP in-memory core implementation
+    # Saved PNG size is 30.1318359375KB
+  [OK] IIO encode/decode PNG in-memory core implementation
+    # Saved JPEG size is 18.544921875KB
+  [OK] IIO encode/decode JPEG in-memory core implementation
+    # Saved HDR size is 39.5810546875KB
+  [OK] IIO encode/decode HDR in-memory core implementation
+    test_all.nim(184, 16): Check failed: i406833 ==
+    colorspace_order(ColorSpaceTypeA, o406835)
+    test_all.nim(184, 16): Check failed: i406833 ==
+    colorspace_order(ColorSpaceTypeA, o406835)
+    test_all.nim(184, 16): Check failed: i406833 ==
+    colorspace_order(ColorSpaceTypeA, o406835)
+    test_all.nim(184, 16): Check failed: i406833 ==
+    colorspace_order(ColorSpaceTypeA, o406835)
+    test_all.nim(184, 16): Check failed: i408635 ==
+    colorspace_order(ColorSpaceTypeY, o408637)
+    test_all.nim(184, 16): Check failed: i408635 ==
+    colorspace_order(ColorSpaceTypeY, o408637)
+    test_all.nim(184, 16): Check failed: i408635 ==
+    colorspace_order(ColorSpaceTypeY, o408637)
+    test_all.nim(184, 16): Check failed: i408635 ==
+    colorspace_order(ColorSpaceTypeY, o408637)
+    test_all.nim(184, 16): Check failed: i410435 ==
+    colorspace_order(ColorSpaceTypeYA, o410437)
+    test_all.nim(184, 16): Check failed: i410435 ==
+    colorspace_order(ColorSpaceTypeYA, o410437)
+    test_all.nim(184, 16): Check failed: i410435 ==
+    colorspace_order(ColorSpaceTypeYA, o410437)
+    test_all.nim(184, 16): Check failed: i410435 ==
+    colorspace_order(ColorSpaceTypeYA, o410437)
+    test_all.nim(184, 16): Check failed: i412235 ==
+    colorspace_order(ColorSpaceTypeYp, o412237)
+    test_all.nim(184, 16): Check failed: i412235 ==
+    colorspace_order(ColorSpaceTypeYp, o412237)
+    test_all.nim(184, 16): Check failed: i412235 ==
+    colorspace_order(ColorSpaceTypeYp, o412237)
+    test_all.nim(184, 16): Check failed: i412235 ==
+    colorspace_order(ColorSpaceTypeYp, o412237)
+    test_all.nim(184, 16): Check failed: i414035 ==
+    colorspace_order(ColorSpaceTypeYpA, o414037)
+    test_all.nim(184, 16): Check failed: i414035 ==
+    colorspace_order(ColorSpaceTypeYpA, o414037)
+    test_all.nim(184, 16): Check failed: i414035 ==
+    colorspace_order(ColorSpaceTypeYpA, o414037)
+    test_all.nim(184, 16): Check failed: i414035 ==
+    colorspace_order(ColorSpaceTypeYpA, o414037)
+    test_all.nim(184, 16): Check failed: i415835 ==
+    colorspace_order(ColorSpaceTypeYCbCr, o415837)
+    test_all.nim(184, 16): Check failed: i415835 ==
+    colorspace_order(ColorSpaceTypeYCbCr, o415837)
+    test_all.nim(184, 16): Check failed: i415835 ==
+    colorspace_order(ColorSpaceTypeYCbCr, o415837)
+    test_all.nim(184, 16): Check failed: i415835 ==
+    colorspace_order(ColorSpaceTypeYCbCr, o415837)
+    test_all.nim(184, 16): Check failed: i417635 ==
+    colorspace_order(ColorSpaceTypeYCbCrA, o417637)
+    test_all.nim(184, 16): Check failed: i417635 ==
+    colorspace_order(ColorSpaceTypeYCbCrA, o417637)
+    test_all.nim(184, 16): Check failed: i417635 ==
+    colorspace_order(ColorSpaceTypeYCbCrA, o417637)
+    test_all.nim(184, 16): Check failed: i419435 ==
+    colorspace_order(ColorSpaceTypeYpCbCr, o419437)
+    test_all.nim(184, 16): Check failed: i419435 ==
+    colorspace_order(ColorSpaceTypeYpCbCr, o419437)
+    test_all.nim(184, 16): Check failed: i419435 ==
+    colorspace_order(ColorSpaceTypeYpCbCr, o419437)
+    test_all.nim(184, 16): Check failed: i419435 ==
+    colorspace_order(ColorSpaceTypeYpCbCr, o419437)
+    test_all.nim(184, 16): Check failed: i421235 ==
+    colorspace_order(ColorSpaceTypeYpCbCrA, o421237)
+    test_all.nim(184, 16): Check failed: i421235 ==
+    colorspace_order(ColorSpaceTypeYpCbCrA, o421237)
+    test_all.nim(184, 16): Check failed: i421235 ==
+    colorspace_order(ColorSpaceTypeYpCbCrA, o421237)
+    test_all.nim(184, 16): Check failed: i423035 ==
+    colorspace_order(ColorSpaceTypeRGB, o423037)
+    test_all.nim(184, 16): Check failed: i426635 ==
+    colorspace_order(ColorSpaceTypeHSV, o426637)
+    test_all.nim(184, 16): Check failed: i426635 ==
+    colorspace_order(ColorSpaceTypeHSV, o426637)
+    test_all.nim(184, 16): Check failed: i426635 ==
+    colorspace_order(ColorSpaceTypeHSV, o426637)
+    test_all.nim(184, 16): Check failed: i426635 ==
+    colorspace_order(ColorSpaceTypeHSV, o426637)
+    test_all.nim(184, 16): Check failed: i428435 ==
+    colorspace_order(ColorSpaceTypeHSVA, o428437)
+    test_all.nim(184, 16): Check failed: i428435 ==
+    colorspace_order(ColorSpaceTypeHSVA, o428437)
+    test_all.nim(184, 16): Check failed: i428435 ==
+    colorspace_order(ColorSpaceTypeHSVA, o428437)
+    test_all.nim(184, 16): Check failed: i430235 ==
+    colorspace_order(ColorSpaceTypeCMYe, o430237)
+    test_all.nim(184, 16): Check failed: i430235 ==
+    colorspace_order(ColorSpaceTypeCMYe, o430237)
+    test_all.nim(184, 16): Check failed: i430235 ==
+    colorspace_order(ColorSpaceTypeCMYe, o430237)
+    test_all.nim(184, 16): Check failed: i430235 ==
+    colorspace_order(ColorSpaceTypeCMYe, o430237)
+    test_all.nim(184, 16): Check failed: i432035 ==
+    colorspace_order(ColorSpaceTypeCMYeA, o432037)
+    test_all.nim(184, 16): Check failed: i432035 ==
+    colorspace_order(ColorSpaceTypeCMYeA, o432037)
+    test_all.nim(184, 16): Check failed: i432035 ==
+    colorspace_order(ColorSpaceTypeCMYeA, o432037)
+  [FAILED] ColorSpaceDB length consistency check
+{A, R, G, B}
+0, R
+1, G
+2, B
+3, A
+  [OK] ColorSpaceDB type properties
+Properties of 'test/sample.png':
+  colorspace_order: [R, G, B, A]
+  colorspace:       RGBA
+  width:            258
+  height:           203
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Properties of 'test/samplepng-out2.bmp':
+  colorspace_order: [R, G, B]
+  colorspace:       RGB
+  width:            258
+  height:           203
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Properties of 'test/samplepng-out2.jpeg':
+  colorspace_order: [R, G, B]
+  colorspace:       RGB
+  width:            258
+  height:           203
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+  [OK] Image LDR I/O (User)

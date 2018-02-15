@@ -1,0 +1,41 @@
+
+[Suite] Group of tests
+PNG Loaded Shape: [203, 258, 4]
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Write HDR from PNG: true
+BMP Loaded Shape: [203, 258, 3]
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Write HDR from BMP: true
+JPEG Loaded Shape: [203, 258, 3]
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+Write HDR from JPEG: true
+HDR Loaded Shape: [203, 258, 3]
+Write HDR from HDR: true
+Scale for the rest of the formats
+Write BMP from HDR: true
+Write PNG from HDR: true
+Write JPEG from HDR: true
+HDR Loaded Shape: [203, 258, 3]
+Writing HDR to memory to read back.
+Success!
+Scale for the rest of the bitmap test
+Write BMP from second HDR: true
+  [OK] Image I/O (Internal)
+Properties of 'test/sample.png':
+  channelLayoutLen:  4
+  channelLayoutName: ChLayoutRGBA
+Traceback (most recent call last)
+test_all.nim(68)         test_all
+fixedseq.nim(109)        $
+channels.nim(130)        $
+channels.nim(112)        name
+system.nim(2724)         sysFatal
+
+    Unhandled exception: index out of bounds
+  [FAILED] Image LDR I/O (User)

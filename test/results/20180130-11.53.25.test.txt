@@ -1,0 +1,41 @@
+[1m[34m
+[Suite] [0mGroup of tests
+[0mPNG Loaded Shape: [203, 258, 4]
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Write HDR from PNG: true
+BMP Loaded Shape: [203, 258, 3]
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Write HDR from BMP: true
+JPEG Loaded Shape: [203, 258, 3]
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+Write HDR from JPEG: true
+HDR Loaded Shape: [203, 258, 3]
+Write HDR from HDR: true
+Scale for the rest of the formats
+Write BMP from HDR: true
+Write PNG from HDR: true
+Write JPEG from HDR: true
+HDR Loaded Shape: [203, 258, 3]
+Writing HDR to memory to read back.
+Success!
+Scale for the rest of the bitmap test
+Write BMP from second HDR: true
+[1m[32m  [OK] [0mImage I/O (Internal)
+[0mWrite BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+Success!
+[1m[32m  [OK] [0mImage LDR I/O (User)
+[0m

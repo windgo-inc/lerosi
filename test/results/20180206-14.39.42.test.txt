@@ -1,0 +1,49 @@
+
+[Suite] LERoSI Unit Tests
+  [OK] IIO load test reference image (PNG) core implementation
+  [OK] IIO obtained test image
+  [OK] Tensor shape equality
+  [OK] Tensor image extent equality
+  [OK] IIO save BMP core implementation
+  [OK] IIO save PNG core implementation
+  [OK] IIO save JPEG core implementation
+  [OK] IIO save JPEG quality parameter coverage
+  [OK] IIO save HDR core implementation
+  [OK] IIO load BMP core implementation
+  [OK] IIO load PNG core implementation
+  [OK] IIO load JPEG core implementation
+  [OK] IIO load JPEG quality parameter coverage
+  [OK] IIO load HDR core implementation
+    # Saved BMP size is 153.888671875KB
+  [OK] IIO encode/decode BMP in-memory core implementation
+    # Saved PNG size is 30.1318359375KB
+  [OK] IIO encode/decode PNG in-memory core implementation
+    # Saved JPEG size is 18.544921875KB
+  [OK] IIO encode/decode JPEG in-memory core implementation
+    # Saved HDR size is 39.5810546875KB
+  [OK] IIO encode/decode HDR in-memory core implementation
+Properties of 'test/sample.png':
+  colorspace_order: [R, G, B, A]
+  colorspace:       RGBA
+  width:            258
+  height:           203
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Properties of 'test/samplepng-out2.bmp':
+  colorspace_order: [R, G, B]
+  colorspace:       RGB
+  width:            258
+  height:           203
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Properties of 'test/samplepng-out2.jpeg':
+  colorspace_order: [R, G, B]
+  colorspace:       RGB
+  width:            258
+  height:           203
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+  [OK] Image LDR I/O (User)

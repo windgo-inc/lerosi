@@ -1,0 +1,25 @@
+
+[Suite] LERoSI Unit Tests
+  [OK] iio_core load test reference image (PNG)
+  [OK] IIO obtained test image
+  [OK] Backend extent equality
+  [OK] Backend extent identity
+  [OK] iio_core save BMP
+  [OK] iio_core save PNG
+  [OK] iio_core save JPEG
+  [OK] iio_core save JPEG quality parameter coverage
+  [OK] iio_core save HDR
+  [OK] iio_core load BMP
+  [OK] iio_core load PNG
+  [OK] iio_core load JPEG
+  [OK] iio_core load JPEG quality parameter coverage
+  [OK] iio_core load HDR
+    # Saved BMP size is 153.89KB
+  [OK] iio_core encode and decode BMP in-memory
+    # Saved PNG size is 30.132KB
+  [OK] iio_core encode and decode PNG in-memory
+    # Saved JPEG size is 18.545KB
+  [OK] iio_core encode and decode JPEG in-memory
+    # Saved HDR size is 39.581KB
+  [OK] iio_core encode and decode HDR in-memory
+  [OK] backend rotate storage order correctness

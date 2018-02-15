@@ -1,0 +1,44 @@
+
+[Suite] LERoSI Unit Tests
+  [OK] IIO/core load test reference image (PNG)
+  [OK] IIO obtained test image
+  [OK] Tensor shape equality
+  [OK] Tensor image extent equality
+  [OK] IIO/core save BMP
+  [OK] IIO/core save PNG
+  [OK] IIO/core save JPEG
+  [OK] IIO/core save JPEG quality parameter coverage
+  [OK] IIO/core save HDR
+  [OK] IIO/core load BMP
+  [OK] IIO/core load PNG
+  [OK] IIO/core load JPEG
+  [OK] IIO/core load JPEG quality parameter coverage
+  [OK] IIO/core load HDR
+    # Saved BMP size is 153.888671875KB
+  [OK] IIO/core encode and decode BMP in-memory
+    # Saved PNG size is 30.1318359375KB
+  [OK] IIO/core encode and decode PNG in-memory
+    # Saved JPEG size is 18.544921875KB
+  [OK] IIO/core encode and decode JPEG in-memory
+    # Saved HDR size is 39.5810546875KB
+  [OK] IIO/core encode and decode HDR in-memory
+  [OK] img/permute shift data order explicit arity correctness
+  [OK] img/permute shift data order implicit arity correctness
+  [OK] ColorSpaceDB ColorSpaceType* length consistency compile-time check
+  [OK] ColorSpaceDB ColorSpaceType* order consistency compile-time check
+  [OK] ColorSpaceDB ColorSpace length consistency compile-time check
+  [OK] ColorSpaceDB ColorSpace length consistency run-time check
+  [OK] ColorSpaceDB ColorSpace order consistency compile-time check
+  [OK] ColorSpaceDB ColorSpace order consistency run-time check
+  [OK] ColorSpaceDB ColorSpace to/from string compile-time naming consistency
+  [OK] ColorSpaceDB ColorSpace to/from string run-time naming consistency
+  [OK] IIO/base load test reference image (PNG)
+  [OK] IIO/base getter width, extent, and dataShape consistency
+  [OK] IIO/base getter height, extent, and dataShape consistency
+  [OK] IIO/base getter colorspace
+  [OK] IIO/base save BMP
+  [OK] IIO/base load BMP
+  [OK] IIO/base save PNG
+  [OK] IIO/base load PNG
+  [OK] IIO/base save JPEG
+  [OK] IIO/base load JPEG

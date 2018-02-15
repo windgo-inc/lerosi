@@ -1,0 +1,98 @@
+
+[Suite] Group of tests
+PNG Loaded Shape: [203, 258, 4]
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Write HDR from PNG: true
+BMP Loaded Shape: [203, 258, 3]
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Write HDR from BMP: true
+JPEG Loaded Shape: [203, 258, 3]
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+Write HDR from JPEG: true
+HDR Loaded Shape: [203, 258, 3]
+Write HDR from HDR: true
+Scale for the rest of the formats
+Write BMP from HDR: true
+Write PNG from HDR: true
+Write JPEG from HDR: true
+HDR Loaded Shape: [203, 258, 3]
+Writing HDR to memory to read back.
+Success!
+Scale for the rest of the bitmap test
+Write BMP from second HDR: true
+  [OK] Image I/O (Internal)
+Properties of 'test/sample.png':
+  channelLayoutLen:  4
+  channelLayoutName: ChLayoutRGBA
+  channels:          [2.ChannelId, 1.ChannelId, 0.ChannelId, 3.ChannelId]
+  width:             258
+  height:            203
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Properties of 'test/samplepng-out.bmp':
+  channelLayoutLen:  3
+  channelLayoutName: ChLayoutRGB
+  channels:          [2.ChannelId, 1.ChannelId, 0.ChannelId]
+  width:             258
+  height:            203
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Properties of 'test/samplepng-out.jpeg':
+  channelLayoutLen:  3
+  channelLayoutName: ChLayoutRGB
+  channels:          [2.ChannelId, 1.ChannelId, 0.ChannelId]
+  width:             258
+  height:            203
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+Success!
+  [OK] Image LDR I/O (User)
+Testing 29.ChannelLayoutId:
+29.ChannelLayoutId.len = 4
+29.ChannelLayoutId.channels = [2.ChannelId, 1.ChannelId, 0.ChannelId, 3.ChannelId]
+29.ChannelLayoutId.ChR = 0 and 29.ChannelLayoutId.channel(ChIdR) = 0
+29.ChannelLayoutId.ChG = 1 and 29.ChannelLayoutId.channel(ChIdG) = 1
+29.ChannelLayoutId.ChB = 2 and 29.ChannelLayoutId.channel(ChIdB) = 2
+29.ChannelLayoutId.ChA = 3 and 29.ChannelLayoutId.channel(ChIdA) = 3
+Testing 15.ChannelLayoutId:
+15.ChannelLayoutId.len = 4
+15.ChannelLayoutId.channels = [0.ChannelId, 1.ChannelId, 2.ChannelId, 3.ChannelId]
+15.ChannelLayoutId.ChR = 2 and 15.ChannelLayoutId.channel(ChIdR) = 2
+15.ChannelLayoutId.ChG = 1 and 15.ChannelLayoutId.channel(ChIdG) = 1
+15.ChannelLayoutId.ChB = 0 and 15.ChannelLayoutId.channel(ChIdB) = 0
+15.ChannelLayoutId.ChA = 3 and 15.ChannelLayoutId.channel(ChIdA) = 3
+Testing 94.ChannelLayoutId:
+94.ChannelLayoutId.len = 3
+94.ChannelLayoutId.channels = [12.ChannelId, 10.ChannelId, 11.ChannelId]
+94.ChannelLayoutId.ChY  = 0 and 94.ChannelLayoutId.channel(ChIdY)  = 0
+94.ChannelLayoutId.ChCb = 1 and 94.ChannelLayoutId.channel(ChIdCb) = 1
+94.ChannelLayoutId.ChCr = 2 and 94.ChannelLayoutId.channel(ChIdCr) = 2
+Testing 95.ChannelLayoutId:
+95.ChannelLayoutId.len = 3
+95.ChannelLayoutId.channels = [12.ChannelId, 11.ChannelId, 10.ChannelId]
+95.ChannelLayoutId.ChY  = 0 and 95.ChannelLayoutId.channel(ChIdY)  = 0
+95.ChannelLayoutId.ChCb = 2 and 95.ChannelLayoutId.channel(ChIdCb) = 2
+95.ChannelLayoutId.ChCr = 1 and 95.ChannelLayoutId.channel(ChIdCr) = 1
+cmpChannels(29.ChannelLayoutId, 29.ChannelLayoutId) = [0, 1, 2, 3]
+cmpChannels(29.ChannelLayoutId, 11.ChannelLayoutId) = [3, 0, 1, 2]
+cmpChannels(29.ChannelLayoutId, 5.ChannelLayoutId) = [0, 1, 2]
+cmpChannels(29.ChannelLayoutId, 15.ChannelLayoutId) = [2, 1, 0, 3]
+cmpChannels(29.ChannelLayoutId, 6.ChannelLayoutId) = [3, 2, 1, 0]
+cmpChannels(29.ChannelLayoutId, 0.ChannelLayoutId) = [2, 1, 0]
+  [OK] Channels and channel layout properties
+StaticLayoutImageRef[system.byte, channels.ChLayoutYpCbCr] and StaticLayoutImageRef[system.byte, channels.ChLayoutYpCbCrA]
+j, i = 0, 0
+j, i = 1, 1
+j, i = 2, 2
+j, i = 3, 0
+  [OK] Compare channels
+  [OK] Copy channels

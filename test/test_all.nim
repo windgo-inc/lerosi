@@ -10,23 +10,22 @@ import lerosi/iio_core # we test the internals of IIO from here
 type
   SO = SaveOptions
 
-#const testColorSpaceIds = [
-#  ColorSpaceIdA,
-#  ColorSpaceIdY,
-#  ColorSpaceIdYA,
-#  ColorSpaceIdYp,
-#  ColorSpaceIdYpA,
-#  ColorSpaceIdYCbCr,
-#  ColorSpaceIdYCbCrA,
-#  ColorSpaceIdYpCbCr,
-#  ColorSpaceIdYpCbCrA,
-#  ColorSpaceIdRGB,
-#  ColorSpaceIdRGBA,
-#  ColorSpaceIdHSV,
-#  ColorSpaceIdHSVA,
-#  ColorSpaceIdCMYe,
-#  ColorSpaceIdCMYeA
-#]
+const testChannelSpaceIds = [
+  VideoChSpaceA,         # VideoA
+  VideoChSpaceY,         # VideoY
+  VideoChSpaceYp,        # VideoYp
+  VideoChSpaceRGB,       # VideoRGB
+  VideoChSpaceCMYe,      # VideoCMYe
+  VideoChSpaceHSV,       # VideoHSV
+  VideoChSpaceYCbCr,     # VideoYCbCr
+  VideoChSpaceYpCbCr,    # VideoYpCbCr
+  PrintChSpaceK,         # PrintK
+  PrintChSpaceCMYeK,     # PrintCMYeK
+  AudioChSpaceLfe,       # AudioLfe
+  AudioChSpaceMono,      # AudioMono
+  AudioChSpaceLeftRight, # AudioLeftRight
+  AudioChSpaceLfRfLbRb   # AudioLfRfLbRb
+]
 
 suite "LERoSI Unit Tests":
   var
@@ -37,11 +36,11 @@ suite "LERoSI Unit Tests":
     expect_shape: MetadataArray
 
     # IIO/base globals
-    #testimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataInterleaved]
+    #testimg: StaticOrderFrame[byte, ChannelSpaceTypeAny, DataInterleaved]
 
-    #plnrimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataPlanar]
-    #ilvdimg: StaticOrderFrame[byte, ColorSpaceTypeAny, DataInterleaved]
-    #dynimg: DynamicOrderFrame[byte, ColorSpaceTypeAny]
+    #plnrimg: StaticOrderFrame[byte, ChannelSpaceTypeAny, DataPlanar]
+    #ilvdimg: StaticOrderFrame[byte, ChannelSpaceTypeAny, DataInterleaved]
+    #dynimg: DynamicOrderFrame[byte, ChannelSpaceTypeAny]
 
   test "iio_core load test reference image (PNG)":
     try:
@@ -146,8 +145,8 @@ suite "LERoSI Unit Tests":
     result = imageio_load_core("test/samplepng-out.q" & $qual & ".jpeg")
 
   # Wrapping imageio_load_core template
-  proc do_read_res_test(res: string): AmBackendCpu[byte] =
-    result = imageio_loadstring_core(res)
+  #proc do_read_res_test(res: string): AmBackendCpu[byte] =
+  #  result = imageio_loadstring_core(res)
 
 
   test "iio_core load JPEG quality parameter coverage":
@@ -177,9 +176,9 @@ suite "LERoSI Unit Tests":
     check_consistency testpic, recovered
 
   test "iio_core encode and decode HDR in-memory":
-    let coredata = imageio_save_core(hdrpic, SO(format: HDR))
+    let coredata = imageio_savestring_core(hdrpic, SO(format: HDR))
     echo "    # Saved HDR size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = coredata.imageio_load_hdr_core
+    let recovered = coredata.imageio_loadstring_hdr_core
     check_consistency hdrpic, recovered
 
   test "backend rotate storage order correctness":
@@ -199,115 +198,93 @@ suite "LERoSI Unit Tests":
 
     check backend_cmp(ilvdpic, testpic)
 
-#[
-  template onEachColorspaceType(fn: untyped): untyped =
-    fn(ColorSpaceTypeA)
-    fn(ColorSpaceTypeY)
-    fn(ColorSpaceTypeYA)
-    fn(ColorSpaceTypeYp)
-    fn(ColorSpaceTypeYpA)
-    fn(ColorSpaceTypeYCbCr)
-    fn(ColorSpaceTypeYCbCrA)
-    fn(ColorSpaceTypeYpCbCr)
-    fn(ColorSpaceTypeYpCbCrA)
-    fn(ColorSpaceTypeRGB)
-    fn(ColorSpaceTypeRGBA)
-    fn(ColorSpaceTypeHSV)
-    fn(ColorSpaceTypeHSVA)
-    fn(ColorSpaceTypeCMYe)
-    fn(ColorSpaceTypeCMYeA)
-
-  template onEachColorspaceId(fn: untyped): untyped =
-    fn(ColorSpaceIdA)
-    fn(ColorSpaceIdY)
-    fn(ColorSpaceIdYA)
-    fn(ColorSpaceIdYp)
-    fn(ColorSpaceIdYpA)
-    fn(ColorSpaceIdYCbCr)
-    fn(ColorSpaceIdYCbCrA)
-    fn(ColorSpaceIdYpCbCr)
-    fn(ColorSpaceIdYpCbCrA)
-    fn(ColorSpaceIdRGB)
-    fn(ColorSpaceIdRGBA)
-    fn(ColorSpaceIdHSV)
-    fn(ColorSpaceIdHSVA)
-    fn(ColorSpaceIdCMYe)
-    fn(ColorSpaceIdCMYeA)
-
   template lengthCheck(cspace: untyped): untyped =
-    const cslen = colorspace_len(cspace)
-    const csorder = colorspace_order(cspace)
+    const cslen = len(cspace)
+    const csorder = order(cspace)
     check csorder.len == cslen
 
   template runTimeLengthCheck(cspace: untyped): untyped =
-    let cslen = colorspace_len(cspace)
-    let csorder = colorspace_order(cspace)
+    let cslen = len(cspace)
+    let csorder = order(cspace)
     check csorder.len == cslen
 
   template orderCheck(cspace: untyped): untyped =
-    const csorder = colorspace_order(cspace)
-    const cschans = colorspace_channels(cspace)
+    const csorder = order(cspace)
+    const cschans = channels(cspace)
 
     var n: int = 0
     for ch in cschans:
       inc n
-      check csorder[colorspace_order(cspace, ch)] == ch
+      check csorder[order(cspace, ch)] == ch
 
     check n == csorder.len
     for i, o in csorder:
-      check i == colorspace_order(cspace, o)
+      check i == order(cspace, o)
 
   template runTimeOrderCheck(cspace: untyped): untyped =
-    let csorder = colorspace_order(cspace)
-    let cschans = colorspace_channels(cspace)
+    let csorder = order(cspace)
+    let cschans = channels(cspace)
 
     var n: int = 0
     for ch in cschans:
       inc n
-      check csorder[colorspace_order(cspace, ch)] == ch
+      check csorder[order(cspace, ch)] == ch
 
     check n == csorder.len
     for i, o in csorder:
-      check i == colorspace_order(cspace, o)
+      check i == order(cspace, o)
 
   template nameCheck(cspace: untyped): untyped =
-    const name = cspace.colorspace_name
-    const cspaceId = cspace.colorspace_id
-    const nameToId = name.colorspace_id
-    check cspaceId == nameToId
-
-  template runTimeNameCheck(cspace: untyped): untyped =
-    let name = cspace.colorspace_name
-    let nameToId = name.colorspace_id
+    const name = cspace.name
+    const nameToId = name.channelspaceof
     check cspace == nameToId
 
-  test "ColorSpaceDB ColorSpaceType* length consistency compile-time check":
-    onEachColorspaceType(lengthCheck)
+  template runTimeNameCheck(cspace: untyped): untyped =
+    let name = cspace.name
+    let nameToId = name.channelspaceof
+    check cspace == nameToId
 
-  test "ColorSpaceDB ColorSpaceType* order consistency compile-time check":
-    onEachColorspaceType(orderCheck)
+  template forEachSpace(fn: untyped): untyped =
+    fn(VideoChSpaceA)         # VideoA
+    fn(VideoChSpaceY)         # VideoY
+    fn(VideoChSpaceYp)        # VideoYp
+    fn(VideoChSpaceRGB)       # VideoRGB
+    fn(VideoChSpaceCMYe)      # VideoCMYe
+    fn(VideoChSpaceHSV)       # VideoHSV
+    fn(VideoChSpaceYCbCr)     # VideoYCbCr
+    fn(VideoChSpaceYpCbCr)    # VideoYpCbCr
+    fn(PrintChSpaceK)         # PrintK
+    fn(PrintChSpaceCMYeK)     # PrintCMYeK
+    fn(AudioChSpaceLfe)       # AudioLfe
+    fn(AudioChSpaceMono)      # AudioMono
+    fn(AudioChSpaceLeftRight) # AudioLeftRight
+    fn(AudioChSpaceLfRfLbRb)  # AudioLfRfLbRb
 
-  test "ColorSpaceDB ColorSpace length consistency compile-time check":
-    onEachColorspaceId(lengthCheck)
+  test "CT^2-DB ChannelSpace enumeration":
+    for id in ChannelSpace: echo "    # ", id.name
 
-  test "ColorSpaceDB ColorSpace length consistency run-time check":
-    for id in testColorSpaceIds: runTimeLengthCheck(id)
+  test "CT^2-DB ChannelSpace length consistency compile-time check":
+    forEachSpace(lengthCheck)
 
-  test "ColorSpaceDB ColorSpace order consistency compile-time check":
-    onEachColorspaceId(orderCheck)
+  test "CT^2-DB ChannelSpace order consistency compile-time check":
+    forEachSpace(orderCheck)
 
-  test "ColorSpaceDB ColorSpace order consistency run-time check":
-    for id in testColorSpaceIds: runTimeOrderCheck(id)
+  test "CT^2-DB ChannelSpace to/from string compile-time naming consistency":
+    forEachSpace(nameCheck)
 
-  test "ColorSpaceDB ColorSpace to/from string compile-time naming consistency":
-    onEachColorspaceType(nameCheck)
+  test "CT^2-DB ChannelSpace length consistency run-time check":
+    for id in ChannelSpace: runTimeLengthCheck(id)
 
-  test "ColorSpaceDB ColorSpace to/from string run-time naming consistency":
-    for id in testColorSpaceIds: runTimeNameCheck(id)
+  test "CT^2-DB ChannelSpace order consistency run-time check":
+    for id in ChannelSpace: runTimeOrderCheck(id)
 
+  test "CT^2-DB ChannelSpace to/from string run-time naming consistency":
+    for id in ChannelSpace: runTimeNameCheck(id)
+
+#[
   template echo_props(name, pic: untyped): untyped =
     echo "Properties of '", name, "':"
-    echo "  colorspace_order: ", pic.colorspace.colorspace_order
+    echo "  order: ", pic.colorspace.order
     echo "  colorspace:       ", pic.colorspace
     echo "  width:            ", pic.width
     echo "  height:           ", pic.height
@@ -335,7 +312,7 @@ suite "LERoSI Unit Tests":
   #  check pla
 
   test "IIO/base getter colorspace":
-    check testimg.colorspace.colorspace_name == "RGBA"
+    check testimg.colorspace.name == "RGBA"
 
   test "IIO/base save BMP":
     check testimg.writeImage("test/samplepng-out2.bmp", SO(format: BMP))
@@ -505,15 +482,15 @@ suite "LERoSI Unit Tests":
 
   #test "Channels and channel layout properties":
   #  template doRGBAProcs(what: untyped): untyped =
-  #    echo what, ".ChR = ", what.ChR, " and ", what, ".channel(ChIdR) = ", what.channel(ChIdR)
-  #    echo what, ".ChG = ", what.ChG, " and ", what, ".channel(ChIdG) = ", what.channel(ChIdG)
-  #    echo what, ".ChB = ", what.ChB, " and ", what, ".channel(ChIdB) = ", what.channel(ChIdB)
-  #    echo what, ".ChA = ", what.ChA, " and ", what, ".channel(ChIdA) = ", what.channel(ChIdA)
+  #    echo what, ".ChR = ", what.ChR, " and ", what, ".channel(R) = ", what.channel(ChIdR)
+  #    echo what, ".ChG = ", what.ChG, " and ", what, ".channel(G) = ", what.channel(ChIdG)
+  #    echo what, ".ChB = ", what.ChB, " and ", what, ".channel(B) = ", what.channel(ChIdB)
+  #    echo what, ".ChA = ", what.ChA, " and ", what, ".channel(A) = ", what.channel(ChIdA)
 
   #  template doYCbCrProcs(what: untyped): untyped =
-  #    echo what, ".ChY  = ", what.ChY,  " and ", what, ".channel(ChIdY)  = ", what.channel(ChIdY)
-  #    echo what, ".ChCb = ", what.ChCb, " and ", what, ".channel(ChIdCb) = ", what.channel(ChIdCb)
-  #    echo what, ".ChCr = ", what.ChCr, " and ", what, ".channel(ChIdCr) = ", what.channel(ChIdCr)
+  #    echo what, ".ChY  = ", what.ChY,  " and ", what, ".channel(Y)  = ", what.channel(ChIdY)
+  #    echo what, ".ChCb = ", what.ChCb, " and ", what, ".channel(Cb) = ", what.channel(ChIdCb)
+  #    echo what, ".ChCr = ", what.ChCr, " and ", what, ".channel(Cr) = ", what.channel(ChIdCr)
 
   #  template doCmpChannelsTest(a, b: untyped): untyped =
   #    echo "cmpChannels(", a, ", ", b, ") = ", cmpChannels(a, b)

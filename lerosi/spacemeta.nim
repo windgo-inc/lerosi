@@ -241,7 +241,7 @@ proc makeChannels(): NimNode {.compileTime.} =
     newIdentDefs(ident"cs", ident"ChannelId")
   ])
 
-  var idproc = newProc(nnkPostfix.newTree(ident"*", ident"id"), [
+  var idproc = newProc(nnkPostfix.newTree(ident"*", ident"channelof"), [
     ident"ChannelId",
     newIdentDefs(ident"ch", ident"string")
   ])
@@ -435,7 +435,7 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
     newIdentDefs(ident"cs", ident"ChannelSpace")
   ])
 
-  var idproc = newProc(nnkPostfix.newTree(ident"*", ident"id"), [
+  var idproc = newProc(nnkPostfix.newTree(ident"*", ident"channelspaceof"), [
     ident"ChannelSpace",
     newIdentDefs(ident"cs", ident"string")
   ])

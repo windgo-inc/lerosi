@@ -1,0 +1,42 @@
+
+[Suite] LERoSI Unit Tests
+  [OK] iio_core load test reference image (PNG)
+  [OK] IIO obtained test image
+  [OK] Backend extent equality
+  [OK] Backend extent identity
+  [OK] iio_core save BMP
+  [OK] iio_core save PNG
+  [OK] iio_core save JPEG
+  [OK] iio_core save JPEG quality parameter coverage
+  [OK] iio_core save HDR
+  [OK] iio_core load BMP
+  [OK] iio_core load PNG
+  [OK] iio_core load JPEG
+  [OK] iio_core load JPEG quality parameter coverage
+  [OK] iio_core load HDR
+    # Saved BMP size is 153.89KB
+  [OK] iio_core encode and decode BMP in-memory
+    # Saved PNG size is 30.132KB
+  [OK] iio_core encode and decode PNG in-memory
+    # Saved JPEG size is 18.545KB
+  [OK] iio_core encode and decode JPEG in-memory
+    # Saved HDR size is 39.581KB
+  [OK] iio_core encode and decode HDR in-memory
+    test_all.nim(187, 43): Check failed: plnrpic.backend_data_shape[1 .. 2] == testpic.backend_data_shape[0 .. 1]
+    test_all.nim(189, 44): Check failed: plnrpic.slice_channel_planar(i) == testpic.slice_channel_interleaved(i)
+    plnrpic.slice_channel_planar(i) was (d: ...)
+    testpic.slice_channel_interleaved(i) was (d: ...)
+    test_all.nim(189, 44): Check failed: plnrpic.slice_channel_planar(i) == testpic.slice_channel_interleaved(i)
+    plnrpic.slice_channel_planar(i) was (d: ...)
+    testpic.slice_channel_interleaved(i) was (d: ...)
+    test_all.nim(189, 44): Check failed: plnrpic.slice_channel_planar(i) == testpic.slice_channel_interleaved(i)
+    plnrpic.slice_channel_planar(i) was (d: ...)
+    testpic.slice_channel_interleaved(i) was (d: ...)
+    test_all.nim(189, 44): Check failed: plnrpic.slice_channel_planar(i) == testpic.slice_channel_interleaved(i)
+    plnrpic.slice_channel_planar(i) was (d: ...)
+    testpic.slice_channel_interleaved(i) was (d: ...)
+    test_all.nim(191, 37): Check failed: ilvdpic.backend_data_shape == testpic.backend_data_shape
+    test_all.nim(192, 18): Check failed: ilvdpic == testpic
+    ilvdpic was (is_init: ...d: ...)
+    testpic was (is_init: ...d: ...)
+  [FAILED] backend rotate storage order correctness

@@ -1,0 +1,40 @@
+
+[Suite] LERoSI Unit Tests
+  [OK] IIO/core load test reference image (PNG)
+  [OK] IIO obtained test image
+  [OK] Backend extent equality
+  [OK] Backend extent identity
+  [OK] IIO/core save BMP
+  [OK] IIO/core save PNG
+  [OK] IIO/core save JPEG
+  [OK] IIO/core save JPEG quality parameter coverage
+Traceback (most recent call last)
+test_all.nim(127)        test_all
+iio_core.nim(191)        imageio_save_core
+am.nim(55)               backend_data
+
+    Unhandled exception: LERoSI/backend/am - backend data access; data are uninitialized.
+  [FAILED] IIO/core save HDR
+  [OK] IIO/core load BMP
+  [OK] IIO/core load PNG
+  [OK] IIO/core load JPEG
+  [OK] IIO/core load JPEG quality parameter coverage
+Traceback (most recent call last)
+test_all.nim(161)        test_all
+am.nim(55)               backend_data_shape
+
+    Unhandled exception: LERoSI/backend/am - backend data access; data are uninitialized.
+  [FAILED] IIO/core load HDR
+    # Saved BMP size is 153.89KB
+  [OK] IIO/core encode and decode BMP in-memory
+    # Saved PNG size is 30.132KB
+  [OK] IIO/core encode and decode PNG in-memory
+    # Saved JPEG size is 18.545KB
+  [OK] IIO/core encode and decode JPEG in-memory
+Traceback (most recent call last)
+test_all.nim(182)        test_all
+iio_core.nim(206)        imageio_save_core
+am.nim(55)               backend_data
+
+    Unhandled exception: LERoSI/backend/am - backend data access; data are uninitialized.
+  [FAILED] IIO/core encode and decode HDR in-memory

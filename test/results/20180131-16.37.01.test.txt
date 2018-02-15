@@ -1,0 +1,96 @@
+
+[Suite] Group of tests
+PNG Loaded Shape: [203, 258, 4]
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Write HDR from PNG: true
+BMP Loaded Shape: [203, 258, 3]
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Write HDR from BMP: true
+JPEG Loaded Shape: [203, 258, 3]
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+Write HDR from JPEG: true
+HDR Loaded Shape: [203, 258, 3]
+Write HDR from HDR: true
+Scale for the rest of the formats
+Write BMP from HDR: true
+Write PNG from HDR: true
+Write JPEG from HDR: true
+HDR Loaded Shape: [203, 258, 3]
+Writing HDR to memory to read back.
+Success!
+Scale for the rest of the bitmap test
+Write BMP from second HDR: true
+  [OK] Image I/O (Internal)
+Properties of 'test/sample.png':
+  channelLayoutLen:  4
+  channelLayoutName: ChLayoutRGBA
+  channels:          [ChIdR, ChIdG, ChIdB, ChIdA]
+  width:             258
+  height:            203
+Write BMP from PNG: true
+Write PNG from PNG: true
+Write JPEG from PNG: true
+Properties of 'test/samplepng-out.bmp':
+  channelLayoutLen:  3
+  channelLayoutName: ChLayoutRGB
+  channels:          [ChIdR, ChIdG, ChIdB]
+  width:             258
+  height:            203
+Write BMP from BMP: true
+Write PNG from BMP: true
+Write JPEG from BMP: true
+Properties of 'test/samplepng-out.jpeg':
+  channelLayoutLen:  3
+  channelLayoutName: ChLayoutRGB
+  channels:          [ChIdR, ChIdG, ChIdB]
+  width:             258
+  height:            203
+Write BMP from JPEG: true
+Write PNG from JPEG: true
+Write JPEG from JPEG: true
+Success!
+  [OK] Image LDR I/O (User)
+Testing ChLayoutRGBA:
+ChLayoutRGBA.len = 4
+ChLayoutRGBA.channels = [ChIdR, ChIdG, ChIdB, ChIdA]
+ChLayoutRGBA.ChR = 0 and ChLayoutRGBA.channel(ChIdR) = 0
+ChLayoutRGBA.ChG = 1 and ChLayoutRGBA.channel(ChIdG) = 1
+ChLayoutRGBA.ChB = 2 and ChLayoutRGBA.channel(ChIdB) = 2
+ChLayoutRGBA.ChA = 3 and ChLayoutRGBA.channel(ChIdA) = 3
+Testing ChLayoutBGRA:
+ChLayoutBGRA.len = 4
+ChLayoutBGRA.channels = [ChIdB, ChIdG, ChIdR, ChIdA]
+ChLayoutBGRA.ChR = 2 and ChLayoutBGRA.channel(ChIdR) = 2
+ChLayoutBGRA.ChG = 1 and ChLayoutBGRA.channel(ChIdG) = 1
+ChLayoutBGRA.ChB = 0 and ChLayoutBGRA.channel(ChIdB) = 0
+ChLayoutBGRA.ChA = 3 and ChLayoutBGRA.channel(ChIdA) = 3
+Testing ChLayoutYCbCr:
+ChLayoutYCbCr.len = 3
+ChLayoutYCbCr.channels = [ChIdY, ChIdCb, ChIdCr]
+ChLayoutYCbCr.ChY  = 0 and ChLayoutYCbCr.channel(ChIdY)  = 0
+ChLayoutYCbCr.ChCb = 1 and ChLayoutYCbCr.channel(ChIdCb) = 1
+ChLayoutYCbCr.ChCr = 2 and ChLayoutYCbCr.channel(ChIdCr) = 2
+Testing ChLayoutYCrCb:
+ChLayoutYCrCb.len = 3
+ChLayoutYCrCb.channels = [ChIdY, ChIdCr, ChIdCb]
+ChLayoutYCrCb.ChY  = 0 and ChLayoutYCrCb.channel(ChIdY)  = 0
+ChLayoutYCrCb.ChCb = 2 and ChLayoutYCrCb.channel(ChIdCb) = 2
+ChLayoutYCrCb.ChCr = 1 and ChLayoutYCrCb.channel(ChIdCr) = 1
+cmpChannels(ChLayoutRGBA, ChLayoutRGBA) = [0, 1, 2, 3]
+cmpChannels(ChLayoutRGBA, ChLayoutARGB) = [3, 0, 1, 2]
+cmpChannels(ChLayoutRGBA, ChLayoutRGB) = [0, 1, 2]
+cmpChannels(ChLayoutRGBA, ChLayoutBGRA) = [2, 1, 0, 3]
+cmpChannels(ChLayoutRGBA, ChLayoutABGR) = [3, 2, 1, 0]
+cmpChannels(ChLayoutRGBA, ChLayoutBGR) = [2, 1, 0]
+  [OK] Channels and channel layout properties
+shapes src.shape=[4, 203, 258] dest.shape=[3, 203, 258]
+copy src channel 2 to dest channel 0
+copy src channel 1 to dest channel 1
+copy src channel 0 to dest channel 2
+  [OK] Copy channels
