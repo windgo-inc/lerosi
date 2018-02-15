@@ -137,16 +137,27 @@ proc backend_local_source[T; U](
 # map_inline requires things from arraymancer, and for some reason wrapping
 # it in an inline procedure does not shield the user of lerosi/backend/am
 # from requiring arraymancer. Compiler bug?
-proc backend_local_source[T; U](
+proc backend_local_source_impl[T; U](
     dest: var AmBackendCpu[T];
     src: AmBackendCpu[U];
     fmap: proc (x: U): T) {.inline.} =
 
   backend_data_check(src)
   dest.d = newTensorUninit[T](src.backend_data_shape)
-  apply2_inline(dest.d, src.d):
-    fmap(y)
+  for i in 0..<src.d.shape.product:
+    dest.d.data[i] = fmap(src.d.data[i])
+
+  #apply2_inline(dest.d, src.d):
+  #  fmap(y)
   dest.is_init = true
+
+proc backend_local_source*[T; U](
+    dest: var AmBackendCpu[T];
+    src: AmBackendCpu[U];
+    fmap: proc (x: U): T) =
+
+  proc fmap_wrapper(x: U): T = fmap(x)
+  backend_local_source_impl(dest, src, fmap_wrapper)
 
 macro implement_backend_source(kind, notkind, conv: untyped): untyped =
   result = quote do:

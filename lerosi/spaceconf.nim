@@ -26,7 +26,6 @@ type
   #ChannelSpaceAnyType* = distinct int
   IIOError* = object of Exception
 
-
 # Type generating macros are kept seperately.
 import ./spacemeta
 

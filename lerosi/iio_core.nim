@@ -1,13 +1,13 @@
 import macros, streams, os, system, sequtils, strutils, math, algorithm, future
 import imghdr, arraymancer
 
+import ./macroutil
 import ./spaceconf
 import ./dataframe
 import ./fixedseq
 import ./backend/am
 
-import stb_image/read as stbi
-import stb_image/write as stbiw
+include ./detail/stb_bindings
 
 export fixedseq, spaceconf, dataframe
 
@@ -30,39 +30,61 @@ proc imageio_check_format*[T](data: openarray[T]): ImageType =
   testImage(header)
 
 
-template imageio_load_core_bytes_impl(resource: untyped; h, w, ch: var int): seq[byte] =
+proc imageio_load_core_file_impl(filename: string; h, w, ch: var int): seq[byte] =
+  const desired_ch = 0.cint
+  var innerh, innerw, innerch: cint
+
+  # TODO: replace the nim stbi.loadFromMemory procedure with a
+  # direct usage of stb_image that forgoes the need of a dynamic
+  # sequence, as is already done in the HDR routine below.
+  var data = stbi_load(cstring(filename), innerw, innerh, innerch, desired_ch)
+  h = innerh.int
+  w = innerw.int
+  ch = innerch.int
+
+  newSeq(result, h*w*ch)
+  copyMem(result[0].addr, data, result.len * sizeof(byte))
+  stbi_image_free(data)
+
+proc imageio_load_core_data_impl(data_in: string|openarray[byte]; h, w, ch: var int): seq[byte] =
+  const desired_ch = 0.cint
+  var innerh, innerw, innerch: cint
+
+  when data_in is seq:
+    var data_in_wrap: seq[cuchar]
+    shallowCopy data_in_wrap, data_in
+  elif data_in is openarray:
+    var data_in_wrap: seq[cuchar]
+    data_in_wrap = map(data_in, x => x.cuchar)
+  else:
+    var data_in_wrap: string
+    shallowCopy data_in_wrap, data_in
+
+
+  # TODO: replace the nim stbi.loadFromMemory procedure with a
+  # direct usage of stb_image that forgoes the need of a dynamic
+  # sequence, as is already done in the HDR routine below.
+  var data = stbi_load_from_memory(data_in_wrap[0].unsafeAddr, data_in.len.cint, innerw, innerh, innerch, desired_ch)
+  h = innerh.int
+  w = innerw.int
+  ch = innerch.int
+
+  newSeq(result, h*w*ch)
+  copyMem(result[0].addr, data, result.len * sizeof(byte))
+  stbi_image_free(data)
+
+
+template imageio_load_core_checks(itype, load_body: untyped): seq[byte] =
   ## Load an image from a file or memory
   block:
     var res: seq[byte]
     try:
-      # Detect image type.
-      let itype = resource.imageio_check_format()
-
       # Select loader.
       case itype:
       of imghdr.ImageType.HDR:
         raise newException(IIOError, "LERoSI-IIO: HDR format must be loaded through the image_load_hdr interface.")
       of {imghdr.ImageType.BMP, imghdr.ImageType.PNG, imghdr.ImageType.JPEG}:
-        const desired_ch = 0
-
-        # TODO: replace the nim stbi.loadFromMemory procedure with a
-        # direct usage of stb_image that forgoes the need of a dynamic
-        # sequence, as is already done in the HDR routine below.
-        let
-          pixels =
-            when resource is string:
-              # resource is interpreted as a filename if it is a string.
-              stbi.load(resource, w, h, ch, desired_ch)
-            else:
-              when resource is seq:
-                # resource is interpreted as an encoded image if it is an openarray
-                stbi.loadFromMemory(resource.toType(byte), w, h, ch, desired_ch)
-              else:
-                (block:
-                  let seqResource = @(resource)
-                  stbi.loadFromMemory(seqResource.toType(byte), w, h, ch, desired_ch))
-
-        res = pixels
+        res = load_body
       else:
         raise newException(IIOError, "LERoSI-IIO: Unsupported image format: " & $itype)
 
@@ -77,11 +99,22 @@ template imageio_load_core_bytes_impl(resource: untyped; h, w, ch: var int): seq
 
 
 proc imageio_load_core2*[T](data: openarray[T]; h, w, ch: var int): seq[byte] =
-  data.imageio_load_core_bytes_impl(h, w, ch)
+  # Detect image type.
+  let itype = data.imageio_check_format()
+  imageio_load_core_checks itype:
+    data.imageio_load_core_data_impl(h, w, ch)
+
+
+proc imageio_loadstring_core2*(data: string, h, w, ch: var int): seq[byte] =
+  let itype = cast[seq[byte]](data[0..min(high(data), 32)]).imageio_check_format()
+  imageio_load_core_checks itype:
+    data.imageio_load_core_data_impl(h, w, ch)
 
 
 proc imageio_load_core2*(filename: string, h, w, ch: var int): seq[byte] =
-  filename.imageio_load_core_bytes_impl(h, w, ch)
+  let itype = filename.imageio_check_format()
+  imageio_load_core_checks itype:
+    filename.imageio_load_core_file_impl(h, w, ch)
 
 
 # Forward ported 2018/02/13
@@ -94,51 +127,26 @@ template imageio_load_core_impl(resource: untyped): Tensor[byte] =
       im1.data[i] = pixels[i]
     im1
 
+template imageio_loadstring_core_impl(resource: string): Tensor[byte] =
+  block:
+    var h, w, ch: int
+    let pixels = imageio_loadstring_core2(resource, h, w, ch)
+    var im1 = newTensorUninit[byte]([h, w, ch])
+    for i in 0..<pixels.len:
+      im1.data[i] = pixels[i]
+    im1
+
 
 proc imageio_load_core*[T](data: openarray[T]): AmBackendCpu[byte] {.deprecated.} =
   result.backend_data(data.imageio_load_core_impl)
 
 
+proc imageio_loadstring_core*(data: string): AmBackendCpu[byte] {.deprecated.} =
+  result.backend_data(data.imageio_loadstring_core_impl)
+
+
 proc imageio_load_core*(filename: string): AmBackendCpu[byte] {.deprecated.} =
   result.backend_data(filename.imageio_load_core_impl)
-
-
-proc stbi_loadf(
-  filename: cstring;
-  x, y, channels_in_file: var cint;
-  desired_channels: cint
-): ptr cfloat
-  {.importc: "stbi_loadf".}
-
-
-proc stbi_loadf_from_memory(
-  buffer: ptr cuchar;
-  length: cint;
-  x, y, channels_in_file: var cint;
-  desired_channels: cint
-): ptr cfloat
-  {.importc: "stbi_loadf_from_memory".}
-
-
-proc stbi_write_hdr(
-  filename: cstring;
-  x, y, channels: cint;
-  data: ptr cfloat
-): cint
-  {.importc: "stbi_write_hdr".}
-
-
-proc stbi_write_hdr_to_func(
-  fn: writeCallback;
-  context: pointer;
-  x, y, channels: cint;
-  data: ptr cfloat
-): cint
-  {.importc: "stbi_write_hdr_to_func".}
-
-
-proc stbi_image_free(p: pointer) {.importc: "stbi_image_free".}
-
 
 
 template imageio_load_hdr_core_bytes_impl(resource: untyped; h, w, ch: var int): seq[float32] =
@@ -168,6 +176,8 @@ template imageio_load_hdr_core_bytes_impl(resource: untyped; h, w, ch: var int):
       w = innerw.int
       ch = innerch.int
       
+      # debate this step. it's slow. would it be better to return a pointer
+      # with a garbage collection hook?
       newSeq(res, w*h*ch)
       copyMem(res[0].addr, data, res.len * sizeof(cfloat))
       stbi_image_free(data)
@@ -190,7 +200,7 @@ proc imageio_load_hdr_core2*(filename: string; h, w, ch: var int): seq[float32] 
 
 
 # Forward ported 2018/02/13
-template imageio_load_hdr_core_impl(resource: untyped): AmBackendCpu[float32] =
+template imageio_load_hdr_core_legacy(resource: untyped): AmBackendCpu[float32] =
   block:
     var
       res: AmBackendCpu[float32]
@@ -200,114 +210,127 @@ template imageio_load_hdr_core_impl(resource: untyped): AmBackendCpu[float32] =
     res
 
 proc imageio_load_hdr_core*[T](data: openarray[T]): AmBackendCpu[float32] {.deprecated.} =
-  imageio_load_hdr_core_impl(data)
+  imageio_load_hdr_core_legacy(data)
 
 proc imageio_load_hdr_core*(filename: string): AmBackendCpu[float32] {.deprecated.} =
-  imageio_load_hdr_core_impl(filename)
+  imageio_load_hdr_core_legacy(filename)
 
 
-# NOTE: We replaced width, height, and channel Tensor properties, since at the low level,
-# we implicily deal with interleaved data.
-
-template write_img_impl[T](img: Tensor[T], U: typedesc, filename: string, iface: untyped): untyped =
-  iface(filename, img.shape[^2], img.shape[^3], img.shape[^1], img.asType(U).asContiguous().data)
-
-template write_img_impl[T](img: Tensor[T], U: typedesc, filename: string, iface, opt: untyped): untyped =
-  iface(filename, img.shape[^2], img.shape[^3], img.shape[^1], img.asType(U).asContiguous().data, opt)
-
-template write_img_impl[T](img: Tensor[T], U: typedesc, iface: untyped): untyped =
-  iface(img.shape[^2], img.shape[^3], img.shape[^1], img.asType(U).asContiguous().data)
-
-template write_img_impl[T](img: Tensor[T], U: typedesc, iface, opt: untyped): untyped =
-  iface(img.shape[^2], img.shape[^3], img.shape[^1], img.asType(U).asContiguous().data, opt)
-
-template write_hdr_impl[T](img: Tensor[T], filename: string): untyped =
+template write_img_impl_immediate(img: pointer; h, w, ch: int; filename: cstring): untyped =
+  # Take the argument list as an untyped for forwarding.
+  # Assume img, opt, and h, w, ch are defined.
   block:
-    let cimg = when img is Tensor[cfloat]: img else: img.asType(cfloat)
-    let data = cimg.asContiguous().data
-    let res = stbi_write_hdr(filename.cstring, cimg.shape[^2].cint, cimg.shape[^3].cint, cimg.shape[^1].cint, data[0].unsafeAddr) == 1
-
+    var res: bool
+    case opt.format:
+      of ImageFormat.PNG: res = stbi_write_png(filename, w.cint, h.cint, ch.cint, cast[ptr byte](img), opt.stride.cint) == 1
+      of ImageFormat.JPEG: res = stbi_write_jpg(filename, w.cint, h.cint, ch.cint, cast[ptr byte](img), opt.quality.cint) == 1
+      of ImageFormat.BMP: res = stbi_write_bmp(filename, w.cint, h.cint, ch.cint, cast[ptr byte](img)) == 1
+      of ImageFormat.HDR: res = stbi_write_hdr(filename, w.cint, h.cint, ch.cint, cast[ptr cfloat](img)) == 1
+      else:
+        raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $opt.format & ".")
     res
 
+template write_img_tofunc_impl_immediate(img: pointer; h, w, ch: int; seqwri, buf: untyped): untyped =
+  # Take the argument list as an untyped for forwarding.
+  # Assume img, opt, and h, w, ch are defined.
+  block:
+    var res: bool
+    case opt.format:
+      of ImageFormat.PNG: res = stbi_write_png_to_func(seqwri, buf.addr, w.cint, h.cint, ch.cint, cast[ptr byte](img), opt.stride.cint) == 1
+      of ImageFormat.JPEG: res = stbi_write_jpg_to_func(seqwri, buf.addr, w.cint, h.cint, ch.cint, cast[ptr byte](img), opt.quality.cint) == 1
+      of ImageFormat.BMP: res = stbi_write_bmp_to_func(seqwri, buf.addr, w.cint, h.cint, ch.cint, cast[ptr byte](img)) == 1
+      of ImageFormat.HDR: res = stbi_write_hdr_to_func(seqwri, buf.addr, w.cint, h.cint, ch.cint, cast[ptr cfloat](img)) == 1
+      else:
+        raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $opt.format & ".")
+    res
 
 proc sequence_write(context, data: pointer, size: cint) {.cdecl.} =
   if size > 0:
     let wbuf = cast[ptr StringStream](context)
     wbuf[].writeData(data, size)
 
+proc write_img_impl(img: pointer; h, w, ch: int; filename: string; opt: SaveOptions): bool {.inline.} =
+  # Needs img, opt, and h, w, ch
+  write_img_impl_immediate(img, h, w, ch, filename.cstring)
 
-template write_hdr_impl[T](img: Tensor[T]): seq[byte] =
-  block:
-    let cimg = when img is Tensor[cfloat]: img else: img.asType(cfloat)
-    let data = cimg.asContiguous().data
-
-    var buf = newStringStream()
-    let res = stbi_write_hdr_to_func(sequence_write, buf.addr, cimg.shape[^2].cint, cimg.shape[^3].cint, cimg.shape[^1].cint, data[0].unsafeAddr) == 1
-
-    if not res:
-      raise newException(IIOError, "LERoSI-IIO-HDR: Error writing to sequence.")
-
-    cast[seq[byte]](buf.data)
+proc write_img_impl(img: pointer; h, w, ch: int; buf: var StringStream; opt: SaveOptions): bool {.inline.} =
+  # Needs img, opt, and h, w, ch
+  write_img_tofunc_impl_immediate(img, h, w, ch, sequence_write, buf)
 
 
 # TODO: Merge imageio_save_core variants using a macro.
 # TODO: Rewrite to work with sequences.
-#
-proc imageio_save_core_am[T](img: Tensor[T];
+
+template handle_load_error2(data, res: untyped): untyped =
+  block:
+    let x = bool(res)
+    if not x:
+      raise newException(IIOError,
+        "LERoSI-IIO: Error writing frame @" &
+        $cast[int](data[0].unsafeAddr) & " to sequence.")
+
+proc imageio_save_core2*[T](data: seq[T];
+    h, w, ch: int;
     filename: string;
-    saveOpt: SaveOptions = SaveOptions(nil)): bool =
+    opt: SaveOptions = SaveOptions(nil)): bool =
 
-  let opt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
+  var dataRef: seq[T]
+  shallowCopy dataRef, data
+  # this prevents a deep copy but permits getting the address because dataRef
+  # is a variable.
 
-  case opt.format:
-    of BMP:
-      result = img.write_img_impl(byte, filename, stbiw.writeBMP)
-    of PNG:
-      result = img.write_img_impl(byte, filename, stbiw.writePNG, opt.stride)
-    of JPEG:
-      result = img.write_img_impl(byte, filename, stbiw.writeJPG, opt.quality)
-    of HDR:
-      result = img.write_hdr_impl(filename)
-    else:
-      raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $opt.format & ".")
+  result = write_img_impl(dataRef[0].unsafeAddr, h, w, ch, filename, opt)
+  handle_load_error2(dataRef, result)
 
 
-proc imageio_save_core_am[T](img: Tensor[T];
-    saveOpt: SaveOptions = SaveOptions(nil)): seq[byte] =
+proc imageio_savestring_core2*[T](data: seq[T];
+    h, w, ch: int;
+    opt: SaveOptions = SaveOptions(nil)): string =
 
-  let opt = if saveOpt == nil: SaveOptions(format: BMP) else: saveOpt
+  var sink = newStringStream() # This will handle the result buffer
+  var dataRef: seq[T]
+  shallowCopy dataRef, data
+  # this prevents a deep copy but permits getting the address because dataRef
+  # is a variable.
 
-  case opt.format:
-    of BMP:
-      result = img.write_img_impl(byte, stbiw.writeBMP)
-    of PNG:
-      result = img.write_img_impl(byte, stbiw.writePNG, opt.stride)
-    of JPEG:
-      result = img.write_img_impl(byte, stbiw.writeJPG, opt.quality)
-    of HDR:
-      result = img.write_hdr_impl()
-    else:
-      raise newException(IIOError, "LERoSI-IIO: Unsupported image format " & $opt.format & ".")
+  handle_load_error2 dataRef:
+    write_img_impl(dataRef[0].unsafeAddr, h, w, ch, sink, opt)
+  result = sink.data
+
+template imageio_save_core2*[T](data: seq[T];
+    h, w, ch: int;
+    opt: SaveOptions = SaveOptions(nil)): seq[byte] =
+  cast[seq[byte]](imageio_savestring_core2(data, h, w, ch, opt))
 
 
+# New interface 2018/02/13
+# Forward ported 2018/02/14
 proc imageio_save_core*[T](img: AmBackendCpu[T],
     filename: string,
-    saveOpt: SaveOptions = SaveOptions(nil)): bool {.deprecated.} =
-  imageio_save_core_am(img.backend_data(), filename, saveOpt)
+    saveOpt: SaveOptions = SaveOptions(nil)): bool {.deprecated, inline.} =
+
+  let
+    tens = img.backend_data().asContiguous()
+    h = tens.shape[^3]
+    w = tens.shape[^2]
+    ch = tens.shape[^1]
+
+  imageio_save_core2(tens.data, h, w, ch, filename, saveOpt)
+
+proc imageio_save_core_legacy[T](img: AmBackendCpu[T],
+    saveOpt: SaveOptions = SaveOptions(nil)): string {.inline.} =
+  let
+    tens = img.backend_data().asContiguous()
+    h = tens.shape[^3]
+    w = tens.shape[^2]
+    ch = tens.shape[^1]
+
+  imageio_savestring_core2(tens.data, h, w, ch, saveOpt)
+
+proc imageio_savestring_core*[T](img: AmBackendCpu[T],
+    saveOpt: SaveOptions = SaveOptions(nil)): string {.deprecated.} =
+  imageio_save_core_legacy(img, saveOpt)
 
 proc imageio_save_core*[T](img: AmBackendCpu[T],
     saveOpt: SaveOptions = SaveOptions(nil)): seq[byte] {.deprecated.} =
-  imageio_save_core_am(img.backend_data(), saveOpt)
-
-# New interface 2018/02/13
-proc imageio_save_core2*[T](img: seq[T];
-    h, w, ch: int;
-    filename: string;
-    saveOpt: SaveOptions = SaveOptions(nil)): bool =
-  imageio_save_core_am(img.toTensor().reshape([h, w, ch]), filename, saveOpt)
-
-proc imageio_save_core2*[T](img: seq[T];
-    h, w, ch: int;
-    saveOpt: SaveOptions = SaveOptions(nil)): seq[byte] =
-  imageio_save_core_am(img.toTensor().reshape([h, w, ch]), saveOpt)
-
+  cast[seq[byte]](imageio_save_core_legacy(img, saveOpt))

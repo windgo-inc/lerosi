@@ -146,8 +146,8 @@ suite "LERoSI Unit Tests":
     result = imageio_load_core("test/samplepng-out.q" & $qual & ".jpeg")
 
   # Wrapping imageio_load_core template
-  proc do_read_res_test(res: seq[byte]): AmBackendCpu[byte] =
-    result = imageio_load_core(res)
+  proc do_read_res_test(res: string): AmBackendCpu[byte] =
+    result = imageio_loadstring_core(res)
 
 
   test "iio_core load JPEG quality parameter coverage":
@@ -159,21 +159,21 @@ suite "LERoSI Unit Tests":
     check_consistency inpic, hdrpic
 
   test "iio_core encode and decode BMP in-memory":
-    let coredata = imageio_save_core(testpic, SO(format: BMP))
+    let coredata = imageio_savestring_core(testpic, SO(format: BMP))
     echo "    # Saved BMP size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = coredata.do_read_res_test
+    let recovered = coredata.imageio_loadstring_core
     check_consistency testpic, recovered
 
   test "iio_core encode and decode PNG in-memory":
-    let coredata = imageio_save_core(testpic, SO(format: PNG, stride: 0))
+    let coredata = imageio_savestring_core(testpic, SO(format: PNG, stride: 0))
     echo "    # Saved PNG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = coredata.do_read_res_test
+    let recovered = coredata.imageio_loadstring_core
     check_consistency testpic, recovered
 
   test "iio_core encode and decode JPEG in-memory":
-    let coredata = imageio_save_core(testpic, SO(format: JPEG, quality: 100))
+    let coredata = imageio_savestring_core(testpic, SO(format: JPEG, quality: 100))
     echo "    # Saved JPEG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = coredata.do_read_res_test
+    let recovered = coredata.imageio_loadstring_core
     check_consistency testpic, recovered
 
   test "iio_core encode and decode HDR in-memory":

@@ -14,14 +14,11 @@ proc `==`*[Storage](a, b: AmSlice[Storage]): bool {.inline.} =
   a.d == b.d
 
 template slicer_interleaved_impl(n, d: typed): untyped =
-  case n
-  of 2: d[_, i].squeeze(1)
-  of 3: d[_, _, i].squeeze(2)
-  of 4: d[_, _, _, i].squeeze(3)
-  of 5: d[_, _, _, _, i].squeeze(4)
-  of 6: d[_, _, _, _, _, i].squeeze(5)
-  of 7: d[_, _, _, _, _, _, i].squeeze(6)
-  else: d
+  block:
+    when compileOption("boundChecks"):
+      assert(2 <= n and n <= 7)
+
+    d.atAxisIndex(n-1, i).squeeze(n-1)
 
 template mslicer_interleaved_impl(n, d, x: typed): untyped =
   case n
@@ -32,9 +29,6 @@ template mslicer_interleaved_impl(n, d, x: typed): untyped =
   of 6: d[_, _, _, _, _, i] = x.unsqueeze(5)
   of 7: d[_, _, _, _, _, _, i] = x.unsqueeze(6)
   else: discard
-
-proc `==`*[B: AmSlice](a, b: B): bool =
-  a.d == b.d
 
 proc slice_channel_planar*[B](b: B, i: int):
     AmSlice[B.Storage] {.inline.} =
