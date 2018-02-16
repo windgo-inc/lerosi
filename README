@@ -6,3 +6,25 @@ and places an emphasis on computational efficiency and accuracy. LERoSI favors
 a hexagonal sampling lattice in pursuit of the above objectives, and seeks to
 provide efficient resampling, homography, and information retrieval techniques
 in an easy to use and understand interface.
+
+The lerosi/iio_core module is functionally complete, with full coverage in
+test/test_all.
+
+To run the tests, use nimble tests.
+
+This project is under heavy development, guided by the needs of a machine vision
+project. It is still in an early stage of development. If you are interested
+check back every week or so. The documentation is forthcoming.
+
+Right now, the major priorities:
+ - GUI for demo visualization purposes (possibly use nimx or wx)
+ - High level [YOLO](https://mratsim.github.io/Arraymancer/uth.speed.html)
+   samplers that work like map_inline. but produce a differently shaped output
+   based on the described lattice of the sampler. This can be made to work with
+   the CL or Cuda backends of arraymancer whenever the API for all that is
+   stable in master.
+ - DFFT
+ - Scale invariants, maybe as a sampler?
+ - Video and audio backends
+ - Internal lab applications
+
