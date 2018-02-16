@@ -170,6 +170,7 @@ proc makeChannels(): NimNode {.compileTime.} =
     chenums = ""
     chidcases = newNimNode(nnkCaseStmt).add(ident"ch")
     chnamecases = newNimNode(nnkCaseStmt).add(ident"ch")
+    chnamespacecases = newNimNode(nnkCaseStmt).add(ident"ch")
     first = true
     skip = true
 
@@ -180,24 +181,9 @@ proc makeChannels(): NimNode {.compileTime.} =
       continue
 
     let
-      typ = ident(namespace & "ChType" & name)
       chnamestr = namespace & name
       idname = namespace & "ChId" & name
       idident = ident(idname)
-
-    let st = quote do:
-      type `typ`* = distinct int
-
-      proc name*(T: typedesc[`typ`]):
-        string {.inline, noSideEffect, raises: [].} = `chnamestr`
-
-      proc `dollarProcVar`*(T: typedesc[`typ`]):
-        string {.inline, noSideEffect, raises: [].} = `chnamestr`
-
-      proc id*(T: typedesc[`typ`]):
-        ChannelId {.inline, noSideEffect, raises: [].} = `idident`
-
-    st.copyChildrenTo(stmts)
 
     chidcases.add(
       newNimNode(nnkOfBranch).add(newLit(chnamestr),
@@ -205,6 +191,9 @@ proc makeChannels(): NimNode {.compileTime.} =
     chnamecases.add(newNimNode(nnkOfBranch).add(
       idident,
       newAssignment(ident"result", newLit(chnamestr))))
+    chnamespacecases.add(newNimNode(nnkOfBranch).add(
+      idident,
+      newAssignment(ident"result", newLit(namespace))))
 
     if first:
       first = false
@@ -251,17 +240,26 @@ proc makeChannels(): NimNode {.compileTime.} =
     newIdentDefs(ident"ch", ident"ChannelId")
   ])
 
+  var namespaceproc = newProc(nnkPostfix.newTree(ident"*", ident"namespace"), [
+    ident"string",
+    newIdentDefs(ident"ch", ident"ChannelId")
+  ])
+
   idproc.body = newStmtList(chidcases)
   idproc.pragma = getterPragma(newNimNode(nnkBracket).add(ident"ValueError"))
 
   nameproc.body = newStmtList(chnamecases.copy)
   nameproc.pragma = getterPragma()
 
+  namespaceproc.body = newStmtList(chnamespacecases.copy)
+  namespaceproc.pragma = getterPragma()
+
   dollarproc.body = newStmtList(chnamecases.copy)
   dollarproc.pragma = getterPragma()
 
   result.add idproc
   result.add nameproc
+  result.add namespaceproc
 
   addendum.copyChildrenTo(result)
 
@@ -273,6 +271,7 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
     csenums = ""
     csidcases = nnkCaseStmt.newTree(ident"cs")
     csnamecases = nnkCaseStmt.newTree(ident"cs")
+    csnamespacecases = nnkCaseStmt.newTree(ident"cs")
     cschancases = nnkCaseStmt.newTree(ident"cs")
     cschanordercases = nnkCaseStmt.newTree(ident"cs")
     cschanindexcases = nnkCaseStmt.newTree(ident"cs")
@@ -347,6 +346,9 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
       proc name*(T: typedesc[`typ`]):
         string {.inline, noSideEffect, raises: [].} = `csnamestr`
 
+      proc namespace*(T: typedesc[`typ`]):
+        string {.inline, noSideEffect, raises: [].} = `namespace`
+
       proc `dollarProcVar`*(T: typedesc[`typ`]):
         string {.inline, noSideEffect, raises: [].} = `csnamestr`
 
@@ -363,6 +365,10 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
     csnamecases.add(nnkOfBranch.newTree(
       idident,
       newAssignment(ident"result", newLit(csnamestr))
+    ))
+    csnamespacecases.add(nnkOfBranch.newTree(
+      idident,
+      newAssignment(ident"result", newLit(namespace))
     ))
     cschancases.add(nnkOfBranch.newTree(
       idident,
@@ -445,6 +451,11 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
       ident"string",
       newIdentDefs(ident"cs", ident"ChannelSpace")
     ])
+  var namespaceproc = newProc(nnkPostfix.newTree(ident"*",
+    ident"namespace"), [
+      ident"string",
+      newIdentDefs(ident"cs", ident"ChannelSpace")
+    ])
 
   var chanproc = newProc(nnkPostfix.newTree(ident"*",
     ident"channels"), [
@@ -475,6 +486,7 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
   idproc.pragma = getterPragma(newNimNode(nnkBracket).add(ident"ValueError"))
 
   nameproc.body = newStmtList(csnamecases.copy)
+  namespaceproc.body = newStmtList(csnamespacecases.copy)
   dollarproc.body = newStmtList(csnamecases.copy)
   chanproc.body = newStmtList(cschancases)
   chanorderproc.body = newStmtList(cschanordercases)
@@ -484,6 +496,7 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
   )
 
   nameproc.pragma = getterPragma()
+  namespaceproc.pragma = getterPragma()
   dollarproc.pragma = getterPragma()
   chanproc.pragma = getterPragma()
   chanorderproc.pragma = getterPragma()
@@ -492,6 +505,7 @@ proc makeChannelSpaces(): NimNode {.compileTime.} =
 
   result.add idproc
   result.add nameproc
+  result.add namespaceproc
   result.add dollarproc
   result.add chanproc
   result.add chanindexproc

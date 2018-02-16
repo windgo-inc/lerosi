@@ -2,9 +2,8 @@ import system, strutils, unittest, macros, math, future
 import typetraits
 
 import lerosi
-import lerosi/backend/am
 import lerosi/iio_core # we test the internals of IIO from here
-#import lerosi/img
+import lerosi/img
 
 # Nicer alias for save options.
 type
@@ -85,7 +84,7 @@ suite "LERoSI Unit Tests":
   #  gn(100); gn(90); gn(80);# gn(70);
   #  #gn(60);  gn(50); gn(40); gn(30);
 
-  test "IIO obtained test image":
+  test "iio_core obtained test image":
     require testpic_initialized
   
   test "Backend extent equality":
@@ -117,8 +116,11 @@ suite "LERoSI Unit Tests":
       SO(format: JPEG, quality: qual))
 
   test "iio_core save JPEG quality parameter coverage":
-    for qual in countdown(100, 20):
+    var n: int = 0
+    for qual in countdown(100, 10):
       check do_write_jpeg_test(testpic, qual)
+      inc n
+    echo "    # Quality variations saved: ", n
 
   test "iio_core save HDR":
     check imageio_save_core(hdrpic,
@@ -150,8 +152,11 @@ suite "LERoSI Unit Tests":
 
 
   test "iio_core load JPEG quality parameter coverage":
-    for qual in countdown(100, 80):
+    var n: int = 0
+    for qual in countdown(100, 10):
       check_consistency do_read_jpeg_test(qual)
+      inc n
+    echo "    # Quality variations loaded: ", n
 
   test "iio_core load HDR":
     let inpic = imageio_load_hdr_core("test/samplepng-out.hdr")
@@ -244,6 +249,16 @@ suite "LERoSI Unit Tests":
     let nameToId = name.channelspaceof
     check cspace == nameToId
 
+  template nameCheckCh(ch: untyped): untyped =
+    const name = ch.name
+    const nameToId = name.channelof
+    check ch == nameToId
+
+  template runTimeNameCheckCh(ch: untyped): untyped =
+    let name = ch.name
+    let nameToId = name.channelof
+    check ch == nameToId
+
   template forEachSpace(fn: untyped): untyped =
     fn(VideoChSpaceA)         # VideoA
     fn(VideoChSpaceY)         # VideoY
@@ -260,8 +275,39 @@ suite "LERoSI Unit Tests":
     fn(AudioChSpaceLeftRight) # AudioLeftRight
     fn(AudioChSpaceLfRfLbRb)  # AudioLfRfLbRb
 
+  template forEachChannel(fn: untyped): untyped =
+    fn(VideoChIdA)            # VideoA
+    fn(VideoChIdY)            # VideoY
+    fn(VideoChIdYp)           # VideoYp
+    fn(VideoChIdR)            # VideoR
+    fn(VideoChIdG)            # VideoG
+    fn(VideoChIdB)            # VideoB
+    fn(VideoChIdC)            # VideoC
+    fn(VideoChIdM)            # VideoM
+    fn(VideoChIdYe)           # VideoYe
+    fn(VideoChIdH)            # VideoH
+    fn(VideoChIdS)            # VideoS
+    fn(VideoChIdV)            # VideoV
+    fn(VideoChIdCb)           # VideoCb
+    fn(VideoChIdCr)           # VideoCr
+    fn(PrintChIdK)            # PrintK
+    fn(PrintChIdC)            # PrintC
+    fn(PrintChIdM)            # PrintM
+    fn(PrintChIdYe)           # PrintYe
+    fn(AudioChIdLfe)          # AudioLfe
+    fn(AudioChIdMono)         # AudioMono
+    fn(AudioChIdLeft)         # AudioLeft
+    fn(AudioChIdRight)        # AudioRight
+    fn(AudioChIdLf)           # AudioLf
+    fn(AudioChIdRf)           # AudioRf
+    fn(AudioChIdLb)           # AudioLb
+    fn(AudioChIdRb)           # AudioRb
+
   test "CT^2-DB ChannelSpace enumeration":
     for id in ChannelSpace: echo "    # ", id.name
+
+  test "CT^2-DB ChannelId enumeration":
+    for id in ChannelId: echo "    # ", id.name
 
   test "CT^2-DB ChannelSpace length consistency compile-time check":
     forEachSpace(lengthCheck)
@@ -280,6 +326,60 @@ suite "LERoSI Unit Tests":
 
   test "CT^2-DB ChannelSpace to/from string run-time naming consistency":
     for id in ChannelSpace: runTimeNameCheck(id)
+
+  test "CT^2-DB ChannelId to/from string compile-time naming consistency":
+    forEachChannel(nameCheckCh)
+
+  test "CT^2-DB ChannelId to/from string run-time naming consistency":
+    for id in ChannelId: runTimeNameCheckCh(id)
+
+  test "img defChannelLayout: eagerCompile works":
+    #template print_channel_layout_t(name, mapping: untyped): untyped =
+    #  echo "    # ", name, " ", mapping.possibleChannelSpaces
+    #  #echo "    # ", name
+    #  #echo "    #    channelspace: ", layout.channelspace
+    #  #echo "    #    mapping:      ", layout.mapping
+
+    #macro print_channel_layout(layout: untyped): untyped =
+    #  let name = toStrLit(layout)
+    #  result = getAst(print_channel_layout_t(name, layout))
+
+    template print_channel_layout(layout: untyped): untyped =
+      echo "    # ", layout.channelspace.name, " ", layout.mapping.possibleChannelSpaces
+
+    template test_channel_layouts(stage: string): untyped = 
+      echo "    # (!) Testing channel layout generator ", stage
+      echo "    # Test static channel layout generator (alpha)"
+      print_channel_layout(defChannelLayout"VideoA")
+      echo "    # Test static channel layout generator (RGB)"
+      print_channel_layout(defChannelLayout"VideoRGBA")
+      print_channel_layout(defChannelLayout"VideoBGRA")
+      print_channel_layout(defChannelLayout"VideoARGB")
+      print_channel_layout(defChannelLayout"VideoABGR")
+      print_channel_layout(defChannelLayout"VideoRGB")
+      print_channel_layout(defChannelLayout"VideoBGR")
+      echo "    # Test static channel layout generator (luma-chrominance)"
+      print_channel_layout(defChannelLayout"VideoYp")
+      print_channel_layout(defChannelLayout"VideoY")
+      print_channel_layout(defChannelLayout"VideoCbCrYp")
+      print_channel_layout(defChannelLayout"VideoCrCbYp")
+      print_channel_layout(defChannelLayout"VideoYpCbCr")
+      print_channel_layout(defChannelLayout"VideoYpCrCb")
+      print_channel_layout(defChannelLayout"VideoCbCr")
+      print_channel_layout(defChannelLayout"VideoCrCb")
+      print_channel_layout(defChannelLayout"VideoYCbCr")
+      print_channel_layout(defChannelLayout"VideoYCrCb")
+      print_channel_layout(defChannelLayout"VideoCbCrY")
+      print_channel_layout(defChannelLayout"VideoCrCbY")
+      echo "    # Test static channel layout generator (CMYe print and CMYe video)"
+      print_channel_layout(defChannelLayout"PrintK")
+      print_channel_layout(defChannelLayout"PrintKCMYe")
+      print_channel_layout(defChannelLayout"PrintCMYeK")
+      print_channel_layout(defChannelLayout"PrintCMYe")
+      print_channel_layout(defChannelLayout"VideoCMYeA")
+      print_channel_layout(defChannelLayout"VideoCMYe")
+
+    test_channel_layouts"with pragma {.eagerCompile.}"
 
 #[
   template echo_props(name, pic: untyped): untyped =

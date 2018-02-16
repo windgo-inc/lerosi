@@ -6,16 +6,16 @@ import ./fixedseq
 import ./dataframe
 import ./spaceconf
 
-import ./backend/am
+import ./backend
 
-export spaceconf, dataframe
+export spaceconf, dataframe, backend
 
 type
   ChannelLayout* = object
     cspace: ChannelSpace
     mapping: ChannelMap
 
-  ChannelLayoutOption* = enum
+  ChannelLayoutOption* {.deprecated.} = enum
     LayoutWithAlpha,
     LayoutReversed
 
@@ -27,15 +27,15 @@ type
     fr: Frame
 
 
-proc initChannelLayout(cs: ChannelSpace, opt: set[ChannelLayoutOption] = {}):
-    ChannelLayout {.inline, noSideEffect, raises: [].} =
-  ## Initialize a channel layout object.
-  result.cspace = cs
-  result.mapping = order(cs)
-  if not opt.contains(LayoutWithAlpha):
-    discard result.mapping.remove(VideoChIdA)
-  if opt.contains(LayoutReversed):
-    result.mapping = result.mapping.reversed
+#proc initChannelLayout(cs: ChannelSpace, opt: set[ChannelLayoutOption] = {}):
+#    ChannelLayout {.deprecated, inline, noSideEffect, raises: [].} =
+#  ## Initialize a channel layout object.
+#  result.cspace = cs
+#  result.mapping = order(cs)
+#  if not opt.contains(LayoutWithAlpha):
+#    discard result.mapping.remove(VideoChIdA)
+#  if opt.contains(LayoutReversed):
+#    result.mapping = result.mapping.reversed
 
 proc initChannelLayout(cs: ChannelSpace; m: ChannelMap):
     ChannelLayout {.inline, noSideEffect, raises: [].} =
@@ -94,6 +94,30 @@ proc layout*[ImgObj: DynamicImageObject](img: ImgObj):
   ## Get the channel layout.
   img.lay
 
+#proc layout*[ImgObj: DynamicImageObject](
+#    img: var ImgObj, cs: ChannelSpace,
+#    opt: set[ChannelLayoutOption] = {}): var ImgObj {.discardable, inline, deprecated.} =
+#  ## Set the channel
+#  img.lay = initChannelLayout(cs, opt)
+#  result = img
+
+proc layout*[ImgObj: DynamicImageObject](
+    img: var ImgObj, cs: ChannelSpace,
+    m: ChannelMap): var ImgObj {.discardable, inline.} =
+  ## Set the channel
+  img.lay = initChannelLayout(cs, m)
+  result = img
+
+proc `channelspace=`*[ImgObj: DynamicImageObject](
+    img: var ImgObj, cs: ChannelSpace)
+    {.inline, noSideEffect, raises: [].} =
+  ## Set the channelspace wiuth a default mapping.
+  img.layout(cs, cs.order)
+
+proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
+    {.inline, noSideEffect, raises: [].} =
+  ## Set the channel mapping
+  img.lay.mapping = m
 
 type
   BaseImage*[Frame] = concept img
@@ -137,35 +161,83 @@ type
     not (img is StructuredImage[Frame])
 
 
-proc layout*[ImgObj: DynamicImageObject](
-    img: var ImgObj, cs: ChannelSpace,
-    opt: set[ChannelLayoutOption] = {}): var ImgObj {.discardable, inline.} =
-  ## Set the channel
-  img.lay = initChannelLayout(cs, opt)
-  result = img
+proc defChannelMap*(s: string): ChannelMap {.inline.} =
+  var toks = capitalTokens(s)
+  let namespace = toks[0]
+  let channels = toks[1..^1].map(na => channelof(namespace & na))
+  initChannelMap(result, channels)
 
-proc layout*[ImgObj: DynamicImageObject](
-    img: var ImgObj, cs: ChannelSpace,
-    m: ChannelMap): var ImgObj {.discardable, inline.} =
-  ## Set the channel
-  img.lay = initChannelLayout(cs, m)
-  result = img
 
-proc `channelspace=`*[ImgObj: DynamicImageObject](
-    img: var ImgObj, cs: ChannelSpace)
-    {.inline, noSideEffect, raises: [].} =
-  ## Set the channelspace wiuth a default mapping.
-  img.layout(cs, {})
+proc defChannelMap*(cs: ChannelSpace; s: string): ChannelMap {.inline.} =
+  let ns = cs.namespace
+  var toks = capitalTokens(s)
+  result.setLen 0
+  for i in 0..<toks.len:
+    let ch = channelof(ns & toks[i])
+    when compileOption("boundChecks"):
+      assert ch in cs.channels, "Channel " & ch.name &
+        " cannot be mapped in channelspace " & cs.name
+    result.add ch
 
-proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
-    {.inline, noSideEffect, raises: [].} =
-  ## Set the channel mapping
-  img.lay.mapping = m
 
+proc possibleChannelSpaces(mapping: ChannelMap; num_options: var int): set[ChannelSpace] {.inline.} =
+  var
+    first = true
+    revised: set[ChannelSpace]
+
+  for ch in mapping:
+    if first:
+      result = ch.channelspaces
+      first = false
+    else:
+      num_options = 0
+      revised = {}
+      for cs in ch.channelspaces:
+        if cs in result:
+          revised.incl(cs)
+          inc num_options
+      
+      result = revised
+
+proc possibleChannelSpaces*(mapping: ChannelMap): set[ChannelSpace] {.inline.} =
+  var x: int
+  possibleChannelSpaces(mapping, x)
+
+proc defChannelLayout*(cs: ChannelSpace, s: string): ChannelLayout {.inline, eagerCompile.} =
+  result = initChannelLayout(cs, defChannelMap(cs, s))
+
+
+proc defChannelLayout*(s: string): ChannelLayout {.inline, eagerCompile.} =
+  var 
+    num_options: int
+    space: ChannelSpace
+    found_space = false
+
+  let
+    mapping = defChannelMap(s)
+    possibilities = possibleChannelSpaces(mapping, num_options)
+
+  # Finally, pick the first possibility. This may be unstable if more than one
+  # possibility exists.
+  
+  #if num_options > 1:
+  #  echo "Warning: There is ambiguity in the channelspaces that can be chosen with ", s, ":"
+  #  for cs in possibilities:
+  #    echo "    ", cs.name
+
+  for cs in possibilities:
+    space = cs
+    found_space = true
+    break
+
+  if not found_space:
+    quit "No channelspace containing channels " & $mapping
+
+  #echo "Found mapping ", mapping, " with spaces ", possibilities, "."
+  result = initChannelLayout(space, mapping)
 
 when isMainModule:
   import typetraits
-  import ./backend/am
 
   template do_dynamic_layout_props_tests(cs: untyped): untyped =
     var img1: DynamicImageObject[OrderedRWFrameObject[AmBackendCpu[byte]]]
@@ -177,25 +249,50 @@ when isMainModule:
     trace_result(img1.channelspace)
     trace_result(img1.mapping)
 
-  const constRgba = initChannelLayout(VideoChSpaceRGB, {LayoutWithAlpha})
-  const constAbgr = initChannelLayout(VideoChSpaceRGB, {LayoutWithAlpha, LayoutReversed})
-  const constRgb = initChannelLayout(VideoChSpaceRGB)
-  const constBgr = initChannelLayout(VideoChSpaceRGB, {LayoutReversed})
+  let mystr = "RGBA"
 
-  template test_channel_layout(stage: string): untyped = 
-    echo "Test " & stage & " channel layout:"
-    echo "RGB : {LayoutWithAlpha}"
-    echo constRgba.channelspace
-    echo constRgba.mapping
-    echo "RGB : {LayoutWithAlpha, LayoutReversed}"
-    echo constAbgr.channelspace
-    echo constAbgr.mapping
-    echo "RGB : {}"
-    echo constRgb.channelspace
-    echo constRgb.mapping
-    echo "RGB : {LayoutReversed}"
-    echo constBgr.channelspace
-    echo constBgr.mapping
+  let rtRgba = defChannelLayout("Video" & mystr) # This will force runtime computation.
+
+  template print_channel_layout_t(name, layout: untyped): untyped =
+    echo "    # ", name
+    echo "    #    channelspace: ", layout.channelspace
+    echo "    #    mapping:      ", layout.mapping
+
+  macro print_channel_layout(layout: untyped): untyped =
+    let name = toStrLit(layout)
+    result = getAst(print_channel_layout_t(name, layout))
+
+  template test_channel_layouts(stage: string): untyped = 
+    echo "    # (!) Testing channel layout generator at ", stage
+    echo "    # Test static channel layout generator (alpha)"
+    print_channel_layout(defChannelLayout"VideoA")
+    echo "    # Test static channel layout generator (RGB)"
+    print_channel_layout(defChannelLayout"VideoRGBA")
+    print_channel_layout(defChannelLayout"VideoBGRA")
+    print_channel_layout(defChannelLayout"VideoARGB")
+    print_channel_layout(defChannelLayout"VideoABGR")
+    print_channel_layout(defChannelLayout"VideoRGB")
+    print_channel_layout(defChannelLayout"VideoBGR")
+    echo "    # Test static channel layout generator (luma-chrominance)"
+    print_channel_layout(defChannelLayout"VideoYp")
+    print_channel_layout(defChannelLayout"VideoY")
+    print_channel_layout(defChannelLayout"VideoCbCrYp")
+    print_channel_layout(defChannelLayout"VideoCrCbYp")
+    print_channel_layout(defChannelLayout"VideoYpCbCr")
+    print_channel_layout(defChannelLayout"VideoYpCrCb")
+    print_channel_layout(defChannelLayout"VideoCbCr")
+    print_channel_layout(defChannelLayout"VideoCrCb")
+    print_channel_layout(defChannelLayout"VideoYCbCr")
+    print_channel_layout(defChannelLayout"VideoYCrCb")
+    print_channel_layout(defChannelLayout"VideoCbCrY")
+    print_channel_layout(defChannelLayout"VideoCrCbY")
+    echo "    # Test static channel layout generator (CMYe print and CMYe video)"
+    print_channel_layout(defChannelLayout"PrintK")
+    print_channel_layout(defChannelLayout"PrintKCMYe")
+    print_channel_layout(defChannelLayout"PrintCMYeK")
+    print_channel_layout(defChannelLayout"PrintCMYe")
+    print_channel_layout(defChannelLayout"VideoCMYeA")
+    print_channel_layout(defChannelLayout"VideoCMYe")
 
   static:
     test_channel_layout"compile-time"
