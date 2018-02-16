@@ -333,7 +333,7 @@ suite "LERoSI Unit Tests":
   test "CT^2-DB ChannelId to/from string run-time naming consistency":
     for id in ChannelId: runTimeNameCheckCh(id)
 
-  test "img defChannelLayout: eagerCompile works":
+  test "img defChannelLayout: eagerCompile passing":
     #template print_channel_layout_t(name, mapping: untyped): untyped =
     #  echo "    # ", name, " ", mapping.possibleChannelSpaces
     #  #echo "    # ", name
@@ -345,7 +345,9 @@ suite "LERoSI Unit Tests":
     #  result = getAst(print_channel_layout_t(name, layout))
 
     template print_channel_layout(layout: untyped): untyped =
-      echo "    # ", layout.channelspace.name, " ", layout.mapping.possibleChannelSpaces
+      echo "    # ", layout.mapping, " ",
+        layout.mapping.possibleChannelSpaces, " ",
+        layout.channelspace.name
 
     template test_channel_layouts(stage: string): untyped = 
       echo "    # (!) Testing channel layout generator ", stage
