@@ -3,14 +3,12 @@ import imghdr, arraymancer
 
 import lerosi/spaceconf
 import lerosi/spacemeta
+import lerosi/backend
+
 import lerosi/iio_core
 #import lerosi/iio_base
 import lerosi/fixedseq
 
-export spaceconf
-#export iio_base
-export fixedseq
-export arraymancer.MetadataArray
-
+export spaceconf, backend, fixedseq #, iio_base
 
 
