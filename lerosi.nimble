@@ -21,11 +21,12 @@ task tests, "Running all tests":
   # Pass the results through tty tee and then a color codes stripper that goes to the file.
   # Added utf-8 to ISO-8859-1 conversion for compatibility with enscript
   exec "test/test_all | tee /dev/tty | sed -r \"s/\\x1B\\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g\" | iconv -c -f utf-8 -t ISO-8859-1 > `cat tmp_filename` || echo 'Test(s) failed, see results!'"
+  # Make PDF, open it, or report failure. Program available from:
+  #   https://gist.github.com/windgo-inc/6d71592dc090146ecf3d0e738c8eb51e
   exec "echo 'Tests complete, see '`cat tmp_filename`' for full results. Generating PDF...'"
-  exec "wgmkpdf 'LERoSI Module Unit Tests' \"`cat tmp_filename`\"  \"`cat tmp_filename`.pdf\" || echo 'Failed to generate PDF from test results!'"
+  exec "wgmkpdf 'LERoSI Module Unit Tests' \"`cat tmp_filename`\"  \"`cat tmp_filename`.pdf\" && xdg-open \"`cat tmp_filename`.pdf\" || echo 'Failed to generate PDF from test results!'"
   echo "done."
-  # Open the results.
-  exec "xdg-open \"`cat tmp_filename`.pdf\""
+  # Cleanup filename record.
   exec "rm tmp_filename"
 
 task bench, "Running benchmarks":
@@ -40,10 +41,11 @@ task bench, "Running benchmarks":
   exec "cat `cat tmp_filename`"
   echo ""
   echo "Generating PDF..."
-  exec "wgmkpdf 'LERoSI Module Benchmark Results' \"`cat tmp_filename`\"  \"`cat tmp_filename`.pdf\" || echo 'Failed to generate PDF from benchmark results!'"
+  # Make PDF, open it, or report failure. Program available from:
+  #   https://gist.github.com/windgo-inc/6d71592dc090146ecf3d0e738c8eb51e
+  exec "wgmkpdf 'LERoSI Module Benchmark Results' \"`cat tmp_filename`\"  \"`cat tmp_filename`.pdf\" && xdg-open \"`cat tmp_filename`.pdf\" || echo 'Failed to generate PDF from benchmark results!'"
   echo "done."
-  # Open the results.
-  exec "xdg-open \"`cat tmp_filename`.pdf\""
+  # Cleanup filename record.
   exec "rm tmp_filename"
 
 before install:
