@@ -1,20 +1,36 @@
 Low Energy Reconstruction of Source Information
 -----------------------------------------------
 
-This project is a machine vision module intended for use in low power environments
-and places an emphasis on computational efficiency and accuracy. LERoSI favors
-a hexagonal sampling lattice in pursuit of the above objectives, and seeks to
-provide efficient resampling, homography, and information retrieval techniques
-in an easy to use and understand interface.
+This project is a machine vision module intended for use in low power
+environments and places an emphasis on computational efficiency and accuracy.
+LERoSI favors a hexagonal sampling lattice in pursuit of the above objectives,
+and seeks to provide efficient resampling, homography, and information
+retrieval techniques in an easy to use and understand interface.
 
-The lerosi/iio_core module is functionally complete, with full coverage in
-test/test_all.
+The lerosi/detail/picio module is functionally complete, with full coverage in
+test/test_all. So, if all you need is an stb_image wrapper which handles HDR
+pictures properly, you can just lift that for now.
 
-To run the tests, use nimble tests.
+This project is under heavy development, guided by the needs of a machine
+vision project. It is still in an early stage of development. If you are
+interested check back every week or so. The documentation is forthcoming. While
+the interface has been totally experimental thus far, the current organization
+is as of today comitted and likely to remain stable until a major version
+change, which is still a long way off.
 
-This project is under heavy development, guided by the needs of a machine vision
-project. It is still in an early stage of development. If you are interested
-check back every week or so. The documentation is forthcoming.
+### Tests
+
+To run the tests, use nimble tests. If this fails, building test/test_all.nim
+manually and executing it from the root project directory will work. Executing
+it from it's own directory will cause the tests to halt immediately because the
+sample image was not found.
+
+### Status
+
+There is a WIP backend type database which is present among other things in
+order to automatically select the fallback backend's types if the backend
+requested isn't enabled. lerosi/backend.nim in it's current state illustrates
+the idea.
 
 Right now, the major priorities:
  - GUI for demo visualization purposes (possibly use nimx or wx)
