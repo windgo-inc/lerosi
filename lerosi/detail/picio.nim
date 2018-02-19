@@ -267,15 +267,15 @@ template picio_loadstring_core_impl(resource: string, T: typedesc): untyped =
     im1
 
 
-proc picio_load_core*[T](data: seq[T]): AmBackendCpu[byte] {.deprecated.} =
+proc picio_load_core*[T](data: seq[T]): BackendType("*", byte) {.deprecated.} =
   result.backend_data(data.picio_load_core_impl(byte))
 
 
-proc picio_loadstring_core*(data: string): AmBackendCpu[byte] {.deprecated.} =
+proc picio_loadstring_core*(data: string): BackendType("*", byte) {.deprecated.} =
   result.backend_data(data.picio_loadstring_core_impl(byte))
 
 
-proc picio_load_core*(filename: string): AmBackendCpu[byte] {.deprecated.} =
+proc picio_load_core*(filename: string): BackendType("*", byte) {.deprecated.} =
   result.backend_data(filename.picio_load_core_impl(byte))
 
 
@@ -291,19 +291,19 @@ proc picio_load_hdr_core2*(filename: string; h, w, ch: var int): seq[cfloat] =
   picio_load_core3_file_by_type(filename, h, w, ch, result)
 
 
-proc picio_load_core*[T](data: seq[T]): AmBackendCpu[cfloat] {.deprecated.} =
+proc picio_load_core*[T](data: seq[T]): BackendType("*", cfloat) {.deprecated.} =
   var h, w, ch: int
   var loaded = picio_load_hdr_core2(data, h, w, ch)
   result.backend_data_raw(loaded, [h, w, ch])
 
 
-proc picio_loadstring_hdr_core*(data: string): AmBackendCpu[cfloat] {.deprecated.} =
+proc picio_loadstring_hdr_core*(data: string): BackendType("*", cfloat) {.deprecated.} =
   var h, w, ch: int
   var loaded = picio_loadstring_hdr_core2(data, h, w, ch)
   result.backend_data_raw(loaded, [h, w, ch])
 
 
-proc picio_load_hdr_core*(filename: string): AmBackendCpu[cfloat] {.deprecated.} =
+proc picio_load_hdr_core*(filename: string): BackendType("*", cfloat) {.deprecated.} =
   var h, w, ch: int
   var loaded = picio_load_hdr_core2(filename, h, w, ch)
   result.backend_data_raw(loaded, [h, w, ch])
@@ -398,7 +398,7 @@ template picio_save_core2*[T](data: seq[T];
 
 # New interface 2018/02/13
 # Forward ported 2018/02/14
-proc picio_save_core*[T](img: AmBackendCpu[T],
+proc picio_save_core*[T](img: BackendType("am", T),
     filename: string,
     saveOpt: SaveOptions = SaveOptions(nil)): bool {.deprecated, inline.} =
 
@@ -410,7 +410,7 @@ proc picio_save_core*[T](img: AmBackendCpu[T],
 
   picio_save_core2(tens.data, h, w, ch, filename, saveOpt)
 
-proc picio_save_core_legacy[T](img: AmBackendCpu[T],
+proc picio_save_core_legacy[T](img: BackendType("am", T),
     saveOpt: SaveOptions = SaveOptions(nil)): string {.inline.} =
   let
     tens = img.backend_data().asContiguous()
@@ -420,11 +420,11 @@ proc picio_save_core_legacy[T](img: AmBackendCpu[T],
 
   picio_savestring_core2(tens.data, h, w, ch, saveOpt)
 
-proc picio_savestring_core*[T](img: AmBackendCpu[T],
+proc picio_savestring_core*[T](img: BackendType("am", T),
     saveOpt: SaveOptions = SaveOptions(nil)): string {.deprecated.} =
   picio_save_core_legacy(img, saveOpt)
 
-proc picio_save_core*[T](img: AmBackendCpu[T],
+proc picio_save_core*[T](img: BackendType("am", T),
     saveOpt: SaveOptions = SaveOptions(nil)): seq[byte] {.deprecated.} =
   cast[seq[byte]](picio_save_core_legacy(img, saveOpt))
 

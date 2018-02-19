@@ -23,18 +23,123 @@
 
 # Import where any backend is needed.
 
+import system, macros, sequtils, strutils, tables
+
+import ./macroutil
+
+var backendIndex {.compileTime.} = initTable[string, int]()
+var defaultBackendId {.compileTime.} = -1 # Should be >= 0 by end of file.
+
 var backendNames {.compileTime.} = newSeq[string]()
-var backends {.compileTime.} = newSeq[string]()
-var slicetypes {.compileTime.} = newSeq[string]()
+var be_datatypes {.compileTime.} = newSeq[string]()
+var be_slicetypes {.compileTime.} = newSeq[string]()
+
+proc insertBackend(name, dataname, slicename: string): int {.compileTime.} =
+  result = backendNames.len
+  backendIndex[name] = result
+  if defaultBackendId < 0:
+    defaultBackendId = result
+  backendNames.add name
+  be_datatypes.add dataname
+  be_slicetypes.add slicename
+
+proc setDefaultBackend(name: string) {.compileTime.} =
+  if name in backendIndex:
+    defaultBackendId = backendIndex[name]
+  else:
+    quit "LERoSI: Cannot set backend to " & name & " because no such backend exists."
+
+proc BackendDesc_impl(name: string): string {.compileTime.} =
+  if name in backendIndex:
+    result = be_datatypes[backendIndex[name]]
+  elif name == "*":
+    result = be_datatypes[defaultBackendId]
+  else:
+    quit "LERoSI: requested type of unknown backend " & name & "."
+
+proc SliceDesc_impl(name: string): string {.compileTime.} =
+  if name in backendIndex:
+    result = be_slicetypes[backendIndex[name]]
+  elif name == "*":
+    result = be_slicetypes[defaultBackendId]
+  else:
+    quit "LERoSI: requested type of unknown backend " & name & "."
+
+proc BackendId_impl(name: string): int {.compileTime.} =
+  if name in backendIndex:
+    backendIndex[name]
+  else:
+    -1
+
+proc BackendName_impl(id: int): string {.compileTime.} =
+  if 0 <= id and id < backendNames.len:
+    backendNames[id]
+  else:
+    ""
+
+proc BackendType_impl(name: string; T: NimNode): NimNode {.compileTime.} =
+  let
+    typename = BackendDesc_impl name
+    typeident = ident(typename)
+    typeexpr = nnkBracketExpr.newTree(typeident, T.copy)
+
+  result = typeexpr
+
+macro BackendType*(name, T: untyped): untyped =
+  result = BackendType_impl($name, T)
+
+proc SliceType_impl(name: string; T: NimNode): NimNode {.compileTime.} =
+  let
+    typename = SliceDesc_impl name
+    typeident = ident(typename)
+    typeexpr = nnkBracketExpr.newTree(typeident, T.copy)
+
+  result = typeexpr
+
+macro SliceType*(name, T: untyped): untyped =
+  result = SliceType_impl($name, T)
+
+macro declareBackend(name, dataname, slicename: untyped): untyped =
+  let
+    sname = nodeToStr(name)
+    sdataname = nodeToStr(dataname)
+    sslicename = nodeToStr(slicename)
+
+    be_index = insertBackend(sname, sdataname, sslicename)
+
+    gentype_ident = ident"T"
+
+  result = newStmtList(
+    newConstStmt(ident(sname & "BackendId"), newLit(be_index)),
+
+    # We don't need this because we can use the macros to construct
+    # each case immediately. This frees us from having to rely on
+    # the compiler for more type info.
+    
+    #nnkTypeSection.newTree(
+    #  nnkTypeDef.newTree(
+    #    ident(sname & "BackendType"),
+    #    nnkGenericParams.newTree(
+    #      nnkIdentDefs.newTree(
+    #        gentype_ident.copy,
+    #        newEmptyNode(),
+    #        newEmptyNode()
+    #      )
+    #    ),
+    #    BackendType(sname, gentype_ident.copy)
+    #  )
+    #)
+  )
 
 when not declared(lerosiDisableAmBackend):
   import ./backend/am
   export am
 
-  static:
-    backendNames.add "am"
-    backends.add "AmBackend"
-    sliceTypes.add "AmSlice"
+  declareBackend "am", "AmBackendCpu", "AmSliceCpu"
+  static: setDefaultBackend "am"
+
+  #declareBackend "am_cuda", "AmBackendCuda", "AmSliceCuda"
+  #declareBackend "am_cl", "AmBackendCL", "AmSliceCL"
 
 # A contrivance to illustrate where this is headed.
 when declared(lerosiExperimentalBackend):
@@ -44,4 +149,7 @@ when declared(lerosiExperimentalBackend):
 when declared(lerosiFallbackBackend):
   import ./backend/fallback
   export fallback
+
+  declareBackend "fallback", "ArrayRefBackend", "ArrayRefSlice"
+  static: setDefaultBackend "fallback"
 
