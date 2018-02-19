@@ -48,9 +48,11 @@ type
     fr: Frame
 
 
-proc initChannelLayout(cs: ChannelSpace; m: ChannelMap):
-    ChannelLayout {.inline, noSideEffect, raises: [].} =
-  ## Initialize a channel layout object 
+proc defChannelLayout*(
+    cs: ChannelSpace; m: ChannelMap):
+    ChannelLayout {.eagerCompile, inline.} =
+  ## Define a channel layout by a ChannelSpace and a ChannelMap.
+  
   when compileOption("boundChecks"):
     assert(m.len <= len(cs))
     let chs = cs.channels
@@ -94,42 +96,6 @@ proc data_frame*
   ## Get the variable reference to the underlying data frame.
   img.fr
 
-
-proc mapping*[ImgObj: DynamicImageObject](img: ImgObj):
-    ChannelMap {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping from the channel layout.
-  img.lay.mapping
-
-
-proc channelspace*[ImgObj: DynamicImageObject](img: ImgObj):
-    ChannelSpace {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping from the channel layout.
-  img.lay.cspace
-
-
-proc layout*[ImgObj: DynamicImageObject](img: ImgObj):
-    ChannelLayout {.inline, noSideEffect, raises: [].} =
-  ## Get the channel layout.
-  img.lay
-
-
-proc layout*[ImgObj: DynamicImageObject](
-    img: var ImgObj, cs: ChannelSpace,
-    m: ChannelMap): var ImgObj {.discardable, inline.} =
-  ## Set the channel
-  img.lay = initChannelLayout(cs, m)
-  result = img
-
-proc `channelspace=`*[ImgObj: DynamicImageObject](
-    img: var ImgObj, cs: ChannelSpace)
-    {.inline, noSideEffect, raises: [].} =
-  ## Set the channelspace wiuth a default mapping.
-  img.layout(cs, cs.order)
-
-proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
-    {.inline, noSideEffect, raises: [].} =
-  ## Set the channel mapping
-  img.lay.mapping = m
 
 type
   BaseImage*[Frame] = concept img

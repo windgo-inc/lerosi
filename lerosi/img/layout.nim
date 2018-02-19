@@ -21,20 +21,31 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import macros, img
-import ./macroutil
+import system, macros, future, strutils, sequtils
+import ../img
+import ../macroutil
 
 
 proc defChannelMap*(s: string): ChannelMap {.inline.} =
   var toks = capitalTokens(s)
-  let namespace = toks[0]
-  let channels = toks[1..^1].map(na => channelof(namespace & na))
-  initChannelMap(result, channels)
+  when compileOption("boundChecks"):
+    assert toks.len > 1, "defChannelMap called with an empty " &
+      "namespaced channel map string " & s & "!"
+  let
+    namespace = toks[0]
+    #channels = toks[1..^1].map(na => channelof(namespace & na))
+
+  initChannelMap result
+  for i in 1..<toks.len:
+    result.add(channelof(namespace & toks[i]))
 
 
 proc defChannelMap*(cs: ChannelSpace; s: string): ChannelMap {.inline.} =
   let ns = cs.namespace
   var toks = capitalTokens(s)
+  when compileOption("boundChecks"):
+    assert toks.len > 0,
+      "defChannelMap called with an empty anonymous channel map string!"
   result.setLen 0
   for i in 0..<toks.len:
     let ch = channelof(ns & toks[i])
@@ -63,12 +74,14 @@ proc possibleChannelSpaces(mapping: ChannelMap; num_options: var int): set[Chann
       
       result = revised
 
+
 proc possibleChannelSpaces*(mapping: ChannelMap): set[ChannelSpace] {.inline.} =
   var x: int
   possibleChannelSpaces(mapping, x)
 
-proc defChannelLayout*(cs: ChannelSpace, s: string): ChannelLayout {.inline, eagerCompile.} =
-  result = initChannelLayout(cs, defChannelMap(cs, s))
+
+proc defChannelLayout*(cs: ChannelSpace, s: string): ChannelLayout {.eagerCompile, inline.} =
+  result = defChannelLayout(cs, defChannelMap(cs, s))
 
 
 proc defChannelLayout*(s: string): ChannelLayout {.inline, eagerCompile.} =
@@ -89,5 +102,43 @@ proc defChannelLayout*(s: string): ChannelLayout {.inline, eagerCompile.} =
   if not found_space:
     quit "No channelspace containing channels " & $mapping
 
-  result = initChannelLayout(space, mapping)
+  result = defChannelLayout(space, mapping)
+
+proc mapping*[ImgObj: DynamicImageObject](img: ImgObj):
+    ChannelMap {.inline, noSideEffect, raises: [].} =
+  ## Get the channel mapping from the channel layout.
+  img.lay.mapping
+
+
+proc channelspace*[ImgObj: DynamicImageObject](img: ImgObj):
+    ChannelSpace {.inline, noSideEffect, raises: [].} =
+  ## Get the channel mapping from the channel layout.
+  img.lay.colorspace
+
+
+proc layout*[ImgObj: DynamicImageObject](img: ImgObj):
+    ChannelLayout {.inline, noSideEffect, raises: [].} =
+  ## Get the channel layout.
+  img.lay
+
+
+proc layout*[ImgObj: DynamicImageObject; M](
+    img: var ImgObj, cs: ChannelSpace,
+    m: M): var ImgObj {.discardable, inline.} =
+  ## Set the channel layout.
+  img.lay = defChannelLayout(cs, m)
+  result = img
+
+
+proc `channelspace=`*[ImgObj: DynamicImageObject](
+    img: var ImgObj, cs: ChannelSpace)
+    {.inline, noSideEffect, raises: [].} =
+  ## Set the channelspace wiuth a default mapping.
+  img.layout(cs, cs.order)
+
+
+proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
+    {.inline, noSideEffect, raises: [].} =
+  ## Set the channel mapping
+  img.lay.mapping = m
 

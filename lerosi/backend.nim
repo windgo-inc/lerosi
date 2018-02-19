@@ -22,10 +22,19 @@
 # SOFTWARE.
 
 # Import where any backend is needed.
-#
+
+var backendNames {.compileTime.} = newSeq[string]()
+var backends {.compileTime.} = newSeq[string]()
+var slicetypes {.compileTime.} = newSeq[string]()
+
 when not declared(lerosiDisableAmBackend):
   import ./backend/am
   export am
+
+  static:
+    backendNames.add "am"
+    backends.add "AmBackend"
+    sliceTypes.add "AmSlice"
 
 # A contrivance to illustrate where this is headed.
 when declared(lerosiExperimentalBackend):

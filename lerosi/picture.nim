@@ -24,16 +24,18 @@
 import macros, streams, os, system, sequtils, strutils, math, algorithm, future
 import arraymancer
 
-import ./img_types
-import ./iio_core
+import ./spaceconf
+import ./detail/picio
 import ./fixedseq
-#import ./channels
-#import ./channelspace
+import ./dataframe
+import ./img
 
 const
   loaded_channel_layouts = [
-    ChannelSpaceIdYp, ChannelSpaceIdYpA,
-    ChannelSpaceIdRGB, ChannelSpaceIdRGBA
+    defChannelLayout"VideoYp",
+    defChannelLayout"VideoYpA",
+    defChannelLayout"VideoRGB",
+    defChannelLayout"VideoRGBA"
   ]
 
 
@@ -51,6 +53,11 @@ proc wrap_stbi_loadedlayout(channels: int):
   else:
     raise newException(IIOError,
       "wrap_stbi_loadedlayout: Channel count must be between 1 and 4.")
+
+
+proc readImageImpl*[T: SomeNumber; B](
+    filename: string): DynamicImageObject[OrderedRWFrameObject[B]] =
+  discard # TODO
 
 
 proc readImage*[T: SomeNumber](filename: string): StaticOrderFrame[T, ChannelSpaceTypeAny, DataInterleaved] =

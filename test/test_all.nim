@@ -21,11 +21,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import system, strutils, unittest, macros, math, future
+import system, strutils, unittest, macros, math, future, algorithm
 import typetraits
 
 import lerosi
-import lerosi/iio_core # we test the internals of IIO from here
+import lerosi/macroutil
+import lerosi/detail/picio
 import lerosi/img
 
 # Nicer alias for save options.
@@ -66,7 +67,7 @@ suite "LERoSI Unit Tests":
 
   test "iio_core load test reference image (PNG)":
     try:
-      testpic = imageio_load_core("test/sample.png")
+      testpic = picio_load_core("test/sample.png")
       hdrpic.backend_source(testpic, x => x.cfloat / 255.0)
       expect_shape = testpic.backend_data_shape
       testpic_initialized = true
@@ -117,24 +118,24 @@ suite "LERoSI Unit Tests":
     require_equal_extent testpic
 
   test "iio_core save BMP":
-    require testpic.imageio_save_core(
+    require testpic.picio_save_core(
       "test/samplepng-out.bmp",
       SO(format: BMP))
 
   test "iio_core save PNG":
-    require testpic.imageio_save_core(
+    require testpic.picio_save_core(
       "test/samplepng-out.png",
       SO(format: PNG, stride: 0))
 
   test "iio_core save JPEG":
-    require testpic.imageio_save_core(
+    require testpic.picio_save_core(
       "test/samplepng-out.jpeg",
       SO(format: JPEG, quality: 100))
 
   # We want to prevent template explosion; this is a big part of
   # why the high level interface should be preferred.
   proc do_write_jpeg_test[T](pic: AmBackendCpu[T], qual: int): bool =
-    result = testpic.imageio_save_core(
+    result = testpic.picio_save_core(
       "test/samplepng-out.q" & $qual & ".jpeg",
       SO(format: JPEG, quality: qual))
 
@@ -146,32 +147,32 @@ suite "LERoSI Unit Tests":
     echo "    # Quality variations saved: ", n
 
   test "iio_core save HDR":
-    check imageio_save_core(hdrpic,
+    check picio_save_core(hdrpic,
       "test/samplepng-out.hdr",
       SO(format: HDR))
 
   # Loading
 
   test "iio_core load BMP":
-    let inpic = imageio_load_core("test/samplepng-out.bmp")
+    let inpic = picio_load_core("test/samplepng-out.bmp")
     check_consistency inpic
     
   test "iio_core load PNG":
-    let inpic = imageio_load_core("test/samplepng-out.png")
+    let inpic = picio_load_core("test/samplepng-out.png")
     check_consistency inpic
 
   test "iio_core load JPEG":
-    let inpic = imageio_load_core("test/samplepng-out.jpeg")
+    let inpic = picio_load_core("test/samplepng-out.jpeg")
     check_consistency inpic
 
   # We want to prevent template explosion; this is a big part of
   # why the high level interface should be preferred.
   proc do_read_jpeg_test(qual: int): AmBackendCpu[byte] =
-    result = imageio_load_core("test/samplepng-out.q" & $qual & ".jpeg")
+    result = picio_load_core("test/samplepng-out.q" & $qual & ".jpeg")
 
-  # Wrapping imageio_load_core template
+  # Wrapping picio_load_core template
   #proc do_read_res_test(res: string): AmBackendCpu[byte] =
-  #  result = imageio_loadstring_core(res)
+  #  result = picio_loadstring_core(res)
 
 
   test "iio_core load JPEG quality parameter coverage":
@@ -182,31 +183,31 @@ suite "LERoSI Unit Tests":
     echo "    # Quality variations loaded: ", n
 
   test "iio_core load HDR":
-    let inpic = imageio_load_hdr_core("test/samplepng-out.hdr")
+    let inpic = picio_load_hdr_core("test/samplepng-out.hdr")
     check_consistency inpic, hdrpic
 
   test "iio_core encode and decode BMP in-memory":
-    let coredata = imageio_savestring_core(testpic, SO(format: BMP))
+    let coredata = picio_savestring_core(testpic, SO(format: BMP))
     echo "    # Saved BMP size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = coredata.imageio_loadstring_core
+    let recovered = coredata.picio_loadstring_core
     check_consistency testpic, recovered
 
   test "iio_core encode and decode PNG in-memory":
-    let coredata = imageio_savestring_core(testpic, SO(format: PNG, stride: 0))
+    let coredata = picio_savestring_core(testpic, SO(format: PNG, stride: 0))
     echo "    # Saved PNG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = coredata.imageio_loadstring_core
+    let recovered = coredata.picio_loadstring_core
     check_consistency testpic, recovered
 
   test "iio_core encode and decode JPEG in-memory":
-    let coredata = imageio_savestring_core(testpic, SO(format: JPEG, quality: 100))
+    let coredata = picio_savestring_core(testpic, SO(format: JPEG, quality: 100))
     echo "    # Saved JPEG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = coredata.imageio_loadstring_core
+    let recovered = coredata.picio_loadstring_core
     check_consistency testpic, recovered
 
   test "iio_core encode and decode HDR in-memory":
-    let coredata = imageio_savestring_core(hdrpic, SO(format: HDR))
+    let coredata = picio_savestring_core(hdrpic, SO(format: HDR))
     echo "    # Saved HDR size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = coredata.imageio_loadstring_hdr_core
+    let recovered = coredata.picio_loadstring_hdr_core
     check_consistency hdrpic, recovered
 
   test "backend rotate storage order correctness":
@@ -356,55 +357,108 @@ suite "LERoSI Unit Tests":
   test "CT^2-DB ChannelId to/from string run-time naming consistency":
     for id in ChannelId: runTimeNameCheckCh(id)
 
-  test "img defChannelLayout: eagerCompile passing":
-    #template print_channel_layout_t(name, mapping: untyped): untyped =
-    #  echo "    # ", name, " ", mapping.possibleChannelSpaces
-    #  #echo "    # ", name
-    #  #echo "    #    channelspace: ", layout.channelspace
-    #  #echo "    #    mapping:      ", layout.mapping
+  var runtimeCallValue: int = 0
+  proc amIEagerlyDoingIt(x: int): bool {.eagerCompile.} =
+    when nimvm:
+      result = true
+    else:
+      runtimeCallValue = x
+      result = false
+  
+  test "macroutil repeatStatic 11, 0, i is monotonic":
+    var x: int = -1
+    repeatStatic 11, 0:
+      inc x
+      check x == i
 
-    #macro print_channel_layout(layout: untyped): untyped =
-    #  let name = toStrLit(layout)
-    #  result = getAst(print_channel_layout_t(name, layout))
+  test "macroutil eagerCompile with static parameters runs in nimvm":
+    repeatStatic 11, 0:
+      check amIEagerlyDoingIt(i)
+    check runtimeCallValue == 0
 
-    template print_channel_layout(layout: untyped): untyped =
-      echo "    # ", layout.mapping, " ",
-        layout.mapping.possibleChannelSpaces, " ",
-        layout.channelspace.name
+  template check_channel_layout(layout: untyped): untyped =
+    check layout.channelspace in layout.mapping.possibleChannelSpaces
+    for ch in layout.mapping:
+      check ch in layout.channelspace.channels
+      check ch in layout.channelspace.order
 
-    template test_channel_layouts(stage: string): untyped = 
-      echo "    # (!) Testing channel layout generator ", stage
-      echo "    # Test static channel layout generator (alpha)"
-      print_channel_layout(defChannelLayout"VideoA")
-      echo "    # Test static channel layout generator (RGB)"
-      print_channel_layout(defChannelLayout"VideoRGBA")
-      print_channel_layout(defChannelLayout"VideoBGRA")
-      print_channel_layout(defChannelLayout"VideoARGB")
-      print_channel_layout(defChannelLayout"VideoABGR")
-      print_channel_layout(defChannelLayout"VideoRGB")
-      print_channel_layout(defChannelLayout"VideoBGR")
-      echo "    # Test static channel layout generator (luma-chrominance)"
-      print_channel_layout(defChannelLayout"VideoYp")
-      print_channel_layout(defChannelLayout"VideoY")
-      print_channel_layout(defChannelLayout"VideoCbCrYp")
-      print_channel_layout(defChannelLayout"VideoCrCbYp")
-      print_channel_layout(defChannelLayout"VideoYpCbCr")
-      print_channel_layout(defChannelLayout"VideoYpCrCb")
-      print_channel_layout(defChannelLayout"VideoCbCr")
-      print_channel_layout(defChannelLayout"VideoCrCb")
-      print_channel_layout(defChannelLayout"VideoYCbCr")
-      print_channel_layout(defChannelLayout"VideoYCrCb")
-      print_channel_layout(defChannelLayout"VideoCbCrY")
-      print_channel_layout(defChannelLayout"VideoCrCbY")
-      echo "    # Test static channel layout generator (CMYe print and CMYe video)"
-      print_channel_layout(defChannelLayout"PrintK")
-      print_channel_layout(defChannelLayout"PrintKCMYe")
-      print_channel_layout(defChannelLayout"PrintCMYeK")
-      print_channel_layout(defChannelLayout"PrintCMYe")
-      print_channel_layout(defChannelLayout"VideoCMYeA")
-      print_channel_layout(defChannelLayout"VideoCMYe")
+  template all_permutations(namespace: string, channelLists: openarray[seq[string]]): untyped =
+    var
+      q: seq[string]
+      bLoop = true
 
-    test_channel_layouts"with pragma {.eagerCompile.}"
+    for channels in channelLists:
+      deepCopy q, channels
+      sort q, system.cmp
+      while bLoop:
+        check_channel_layout(defChannelLayout(namespace & q.join))
+        bLoop = nextPermutation(q)
+
+  template all_ordinary_subgroups(ns, a, b, c, d, o: untyped): untyped =
+    all_permutations(ns, [
+      @[a, b, c, d, o],
+      @[a, b, c, d],
+      @[a, b, o],
+      @[c, d, o],
+      @[a, b],
+      @[c, d]
+    ])
+  
+  template all_ordinary_subgroups(ns, a, b, c, o: untyped): untyped =
+    all_permutations(ns, [
+      @[a, b, c, o],
+      @[a, b, c],
+      @[a, b],
+      @[a, c],
+      @[b, c],
+      @[a],
+      @[b],
+      @[c],
+      @[o]
+    ])
+
+  template all_ordinary_subgroups(ns, a, b, c: untyped): untyped =
+    all_permutations(ns, [
+      @[a, b, c],
+      @[a, b],
+      @[a, c],
+      @[b, c],
+      @[a],
+      @[b],
+      @[c]
+    ])
+
+  # Video channel mapping consistency
+  test "img/layout defChannelLayout consistency (subgroups of RGB)":
+    all_ordinary_subgroups("Video", "R", "G", "B", "A")
+
+  test "img/layout defChannelLayout consistency (subgroups of CMYe)":
+    all_ordinary_subgroups("Video", "C", "M", "Ye", "A")
+
+  test "img/layout defChannelLayout consistency (subgroups of HSV)":
+    all_ordinary_subgroups("Video", "H", "S", "V", "A")
+
+  test "img/layout defChannelLayout consistency (subgroups of YpCbCr)":
+    all_ordinary_subgroups("Video", "Yp", "Cb", "Cr", "A")
+
+  test "img/layout defChannelLayout consistency (subgroups of YCbCr)":
+    all_ordinary_subgroups("Video", "Y", "Cb", "Cr", "A")
+
+
+  # Print channel mapping consistency
+  test "img/layout defChannelLayout consistency (subgroups of CMYeK)":
+    all_ordinary_subgroups("Print", "C", "M", "Ye", "K")
+
+
+  # Audio channel mapping consistency
+  test "img/layout defChannelLayout consistency (subgroups of LeftRightLfe)":
+    all_ordinary_subgroups("Audio", "Left", "Right", "Lfe")
+
+  test "img/layout defChannelLayout consistency (subgroups of LfRfLbRbLfe)":
+    all_ordinary_subgroups("Audio", "Lf", "Rf", "Lb", "Rb", "Lfe")
+
+
+  # 
 
 #[
   template echo_props(name, pic: untyped): untyped =
@@ -482,7 +536,7 @@ suite "LERoSI Unit Tests":
   #test "IIO/base encode and decode HDR in-memory":
   #  let coredata = writeImage(hdrpic, SO(format: HDR))
   #  echo "    # Saved HDR size is ", coredata.len.float / 1024.0, "KB"
-  #  let recovered = coredata.imageio_load_hdr_core
+  #  let recovered = coredata.picio_load_hdr_core
   #  check_consistency hdrpic, recovered
 
 
@@ -526,72 +580,72 @@ suite "LERoSI Unit Tests":
   #  echo "PNG Loaded Shape: ", testpic.shape
 
   #  echo "Write BMP from PNG: ",
-  #    testpic.imageio_save_core("test/samplepng-out.bmp", SO(format: BMP))
+  #    testpic.picio_save_core("test/samplepng-out.bmp", SO(format: BMP))
   #  echo "Write PNG from PNG: ",
-  #    testpic.imageio_save_core(
+  #    testpic.picio_save_core(
   #      "test/samplepng-out.png", SO(format: PNG, stride: 0))
   #  echo "Write JPEG from PNG: ",
-  #    testpic.imageio_save_core(
+  #    testpic.picio_save_core(
   #      "test/samplepng-out.jpeg", SO(format: JPEG, quality: 100))
   #  echo "Write HDR from PNG: ",
-  #    imageio_save_core(testpic.asType(cfloat) / 255.0,
+  #    picio_save_core(testpic.asType(cfloat) / 255.0,
   #      "test/samplepng-out.hdr", SO(format: HDR))
 
-  #  let testpic2 = "test/samplepng-out.bmp".imageio_load_core()
+  #  let testpic2 = "test/samplepng-out.bmp".picio_load_core()
   #  echo "BMP Loaded Shape: ", testpic2.shape
 
   #  echo "Write BMP from BMP: ",
-  #    testpic2.imageio_save_core("test/samplebmp-out.bmp", SO(format: BMP))
+  #    testpic2.picio_save_core("test/samplebmp-out.bmp", SO(format: BMP))
   #  echo "Write PNG from BMP: ",
-  #    testpic2.imageio_save_core(
+  #    testpic2.picio_save_core(
   #      "test/samplebmp-out.png", SO(format: PNG, stride: 0))
   #  echo "Write JPEG from BMP: ",
-  #    testpic2.imageio_save_core(
+  #    testpic2.picio_save_core(
   #      "test/samplebmp-out.jpeg", SO(format: JPEG, quality: 100))
   #  echo "Write HDR from BMP: ",
-  #    imageio_save_core(testpic2.asType(cfloat) / 255.0,
+  #    picio_save_core(testpic2.asType(cfloat) / 255.0,
   #      "test/samplebmp-out.hdr", SO(format: HDR))
 
-  #  let testpicjpeg = "test/samplepng-out.jpeg".imageio_load_core()
+  #  let testpicjpeg = "test/samplepng-out.jpeg".picio_load_core()
   #  echo "JPEG Loaded Shape: ", testpicjpeg.shape
 
   #  echo "Write BMP from JPEG: ",
-  #    testpicjpeg.imageio_save_core("test/samplejpeg-out.bmp", SO(format: BMP))
+  #    testpicjpeg.picio_save_core("test/samplejpeg-out.bmp", SO(format: BMP))
   #  echo "Write PNG from JPEG: ",
-  #    testpicjpeg.imageio_save_core(
+  #    testpicjpeg.picio_save_core(
   #      "test/samplejpeg-out.png", SO(format: PNG, stride: 0))
   #  echo "Write JPEG from JPEG: ",
-  #    testpicjpeg.imageio_save_core(
+  #    testpicjpeg.picio_save_core(
   #      "test/samplejpeg-out.jpeg", SO(format: JPEG, quality: 100))
   #  echo "Write HDR from JPEG: ",
-  #    imageio_save_core(testpicjpeg.asType(cfloat) / 255.0,
+  #    picio_save_core(testpicjpeg.asType(cfloat) / 255.0,
   #      "test/samplejpeg-out.hdr", SO(format: HDR))
 
-  #  var testpichdr = "test/samplepng-out.hdr".imageio_load_hdr_core()
+  #  var testpichdr = "test/samplepng-out.hdr".picio_load_hdr_core()
   #  echo "HDR Loaded Shape: ", testpichdr.shape
 
   #  echo "Write HDR from HDR: ",
-  #    testpichdr.imageio_save_core("test/samplehdr-out.hdr", SO(format: HDR))
+  #    testpichdr.picio_save_core("test/samplehdr-out.hdr", SO(format: HDR))
 
   #  echo "Scale for the rest of the formats"
   #  testpichdr *= 255.0
 
   #  echo "Write BMP from HDR: ",
-  #    testpichdr.imageio_save_core("test/samplehdr-out.bmp", SO(format: BMP))
+  #    testpichdr.picio_save_core("test/samplehdr-out.bmp", SO(format: BMP))
   #  echo "Write PNG from HDR: ",
-  #    testpichdr.imageio_save_core(
+  #    testpichdr.picio_save_core(
   #      "test/samplehdr-out.png", SO(format: PNG, stride: 0))
   #  echo "Write JPEG from HDR: ",
-  #    testpichdr.imageio_save_core(
+  #    testpichdr.picio_save_core(
   #      "test/samplehdr-out.jpeg", SO(format: JPEG, quality: 100))
 
-  #  var myhdrpic = "test/samplehdr-out.hdr".imageio_load_hdr_core()
+  #  var myhdrpic = "test/samplehdr-out.hdr".picio_load_hdr_core()
   #  echo "HDR Loaded Shape: ", myhdrpic.shape
 
   #  echo "Writing HDR to memory to read back."
-  #  let hdrseq = myhdrpic.imageio_save_core(SO(format: HDR))
+  #  let hdrseq = myhdrpic.picio_save_core(SO(format: HDR))
   #  #echo hdrseq
-  #  let myhdrpic2 = hdrseq.imageio_load_hdr_core()
+  #  let myhdrpic2 = hdrseq.picio_load_hdr_core()
   #  assert myhdrpic == myhdrpic2
   #  echo "Success!"
 
@@ -599,7 +653,7 @@ suite "LERoSI Unit Tests":
   #  echo "Scale for the rest of the bitmap test"
 
   #  echo "Write BMP from second HDR: ",
-  #    myhdrpic.imageio_save_core("test/samplehdr2-out.bmp", SO(format: BMP))
+  #    myhdrpic.picio_save_core("test/samplehdr2-out.bmp", SO(format: BMP))
 
 
 

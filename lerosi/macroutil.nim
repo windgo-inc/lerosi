@@ -100,6 +100,43 @@ template accessorPragma*(ase: bool,
 
 {.deprecated: [getterPragmaAnyExcept: getterPragmaAnyException].}
 
+
+# Log-depth recursive unroller. For compile-time tests that can't be put in
+# a loop without involving macros.
+template repeatStatic*(n: static[int], k: static[int], body: untyped): untyped =
+  when 3 < n:
+    repeatStatic(n div 3, k):
+      body
+    repeatStatic(n div 3, k + n div 3):
+      body
+    repeatStatic(n - 2 * (n div 3), k + 2 * (n div 3)):
+      body
+  elif n == 3:
+    block:
+      const i {.inject.} = k
+      body
+    block:
+      const i {.inject.} = k + 1
+      body
+    block:
+      const i {.inject.} = k + 2
+      body
+  elif n == 2:
+    block:
+      const i {.inject.} = k
+      body
+    block:
+      const i {.inject.} = k + 1
+      body
+  elif n == 1:
+    block:
+      const i {.inject.} = k
+      body
+  else:
+    discard
+
+
+
 var countEagerCompileProcs {.compileTime.} = 0
 #static:
 #  randomize()
@@ -108,17 +145,22 @@ proc preferCompileTimeGen(targetProc: NimNode):
     NimNode {.compileTime.} =
 
   let
-    originalName = targetProc.name.toStrLit().strVal
+    (originalName, isExported) = case targetProc[0].kind:
+      of nnkPostfix:
+        (toStrLit(targetProc[0][1]).strVal, true)
+      else:
+        (targetProc.name.toStrLit().strVal, false)
+
     targetIdent = ident(originalName)
 
-  inc(countEagerCompileProcs)
-  let
-    r1 = random(10000000)
-    r2 = random(10000000)
+  echo originalName, if isExported: " is exported" else: " is private"
+
+  inc countEagerCompileProcs
+  let r1 = countEagerCompileProcs
 
   let
-    targetProcId = ident(originalName & $r1 & $countEagerCompileProcs)
-    compileProcId = ident(originalName & "Com" & $r2 & $countEagerCompileProcs)
+    targetProcId = ident(originalName & "_ecom_" & $r1 & "_procdo")
+    compileProcId = ident(originalName & "_ecom_" & $r1 & "_procvm")
 
   var
     compileProc = newProc(compileProcId)
@@ -130,8 +172,6 @@ proc preferCompileTimeGen(targetProc: NimNode):
 
   var
     forwardCaller = nnkCall.newTree(targetProcId)
-
-    compileCaller = nnkCall.newTree(compileProcId)
     deferredCompileCaller = nnkCall.newTree(compileProcId)
 
   for param in targetProc.params:
@@ -143,17 +183,13 @@ proc preferCompileTimeGen(targetProc: NimNode):
             of nnkIdent:
               #echo "found ident ", param[i]
               forwardCaller.add param[i].copy
-              compileCaller.add param[i].copy
               deferredCompileCaller.add param[i].copy
             else:
               continue
       else:
         continue
 
-  compileProc.body = newStmtList(
-    #nnkCall.newTree(ident"echo", newLit"compile time !!!"),
-    forwardCaller.copy)
-  #echo targetIdent
+  compileProc.body = newStmtList(forwardCaller.copy)
 
   result = newStmtList(targetProc.copy, compileProc.copy)
 
@@ -161,8 +197,8 @@ proc preferCompileTimeGen(targetProc: NimNode):
   finalProc.params = targetProc.params.copy
   finalProc.pragma = nnkPragma.newTree
   finalProc.body = nnkWhenStmt.newTree(
-    nnkElifBranch.newTree(
-      parseStmt("compiles(((const privt_sss = " & toStrLit(deferredCompileCaller.copy).strVal & ")))"), compileCaller
+    nnkElifBranch.newTree( # Kind of dirty :/
+      parseStmt("compiles(((const priv_" & $r1 & " = " & toStrLit(deferredCompileCaller.copy).strVal & ")))"), deferredCompileCaller.copy
     ),
     nnkElse.newTree(
       forwardCaller
@@ -173,7 +209,9 @@ proc preferCompileTimeGen(targetProc: NimNode):
   finalProc.copyChildrenTo(myTplt)
 
   result.add myTplt
-  result.add nnkExportStmt.newTree(myTplt.name)
+
+  if isExported:
+    result.add nnkExportStmt.newTree(myTplt.name)
 
   # Debugging purposes
   #echo $toStrLit(result)

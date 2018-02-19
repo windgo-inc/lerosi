@@ -20,23 +20,31 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-#
-# Authors:
-#   William Whitacre (w.whitacre@windgo.com)
-#
 
-import macros, streams, os, system, sequtils, strutils, math, algorithm, future
-import imghdr, arraymancer
+import macros, system, imghdr
+import ../img
 
-import lerosi/spaceconf
-import lerosi/spacemeta
-import lerosi/backend
+type
+  PicIOError* = object of Exception
 
-#import lerosi/detail/picio
-#import lerosi/picture
-import lerosi/fixedseq
-import lerosi/img
 
-export spaceconf, backend, fixedseq #, iio_base
+template toType*[U](d: openarray[U], T: typedesc): untyped =
+  ## Convert from one array type to another. In the case that the target type
+  ## is the same as the current array type
+  when T is U and U is T: d else: map(d, proc (x: U): T = T(x))
+
+
+proc picio_check_format*(filename: string): ImageType =
+  ## Check the image format stored within a file.
+  testImage(filename)
+
+
+proc picio_check_format*[T](data: openarray[T]): ImageType =
+  ## Check the image format stored within core memory.
+  var header: seq[int8]
+  newSeq(header, 32)
+  copyMem(header[0].addr, data[0].unsafeAddr, 32)
+  testImage(header)
+
 
 
