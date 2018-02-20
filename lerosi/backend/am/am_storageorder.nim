@@ -49,11 +49,11 @@ template call_permute_right(dat: untyped, arity: int): untyped =
   of 5: dat.permute(4, 0, 1, 2, 3)
   of 6: dat.permute(5, 0, 1, 2, 3, 4)
   of 7: dat.permute(6, 0, 1, 2, 3, 4, 5)
-  else: dat
+  else: dat # Unreachable
 
 template do_permute(pmut: untyped; b: typed): untyped =
   let d = b.backend_data
-  b.backend_data(pmut(d, d.shape.len))
+  b.backend_data(pmut(d, d.shape.len).asContiguous())
   b
 
 proc backend_rotate_planar*[B](b: var B): var B {.discardable.} =

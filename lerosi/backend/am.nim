@@ -65,7 +65,7 @@ proc backend_data*[Storage](b: var AmBackend[Storage], d: Storage):
 proc backend_data_raw*[T](b: var AmBackendCpu[T], d: seq[T], s: AmShape):
     var AmBackendCpu[T] {.discardable, inline.} = initraw(ascpu, b, d, s)
 
-proc backend_data_raw*[T](b: var AmBackendCpu[T], d: seq[T], s: openarray[int]):
+proc backend_data_raw*[T](b: var AmBackendCpu[T], d: seq[T], s: varargs[int]):
     var AmBackendCpu[T] {.discardable, inline.} =
   initraw(ascpu, b, d, s)
 

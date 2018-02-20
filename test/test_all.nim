@@ -21,41 +21,42 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import system, strutils, unittest, macros, math, future, algorithm
+import system, sequtils, strutils, unittest, macros, math, future, algorithm
 import typetraits
 
 import lerosi
 import lerosi/macroutil
 import lerosi/detail/picio
+import lerosi/picture
 import lerosi/img
 
 # Nicer alias for save options.
 type
   SO = SaveOptions
 
-const testChannelSpaceIds = [
-  VideoChSpaceA,         # VideoA
-  VideoChSpaceY,         # VideoY
-  VideoChSpaceYp,        # VideoYp
-  VideoChSpaceRGB,       # VideoRGB
-  VideoChSpaceCMYe,      # VideoCMYe
-  VideoChSpaceHSV,       # VideoHSV
-  VideoChSpaceYCbCr,     # VideoYCbCr
-  VideoChSpaceYpCbCr,    # VideoYpCbCr
-  PrintChSpaceK,         # PrintK
-  PrintChSpaceCMYeK,     # PrintCMYeK
-  AudioChSpaceLfe,       # AudioLfe
-  AudioChSpaceMono,      # AudioMono
-  AudioChSpaceLeftRight, # AudioLeftRight
-  AudioChSpaceLfRfLbRb   # AudioLfRfLbRb
-]
+#const testChannelSpaceIds = [
+#  VideoChSpaceA,         # VideoA
+#  VideoChSpaceY,         # VideoY
+#  VideoChSpaceYp,        # VideoYp
+#  VideoChSpaceRGB,       # VideoRGB
+#  VideoChSpaceCMYe,      # VideoCMYe
+#  VideoChSpaceHSV,       # VideoHSV
+#  VideoChSpaceYCbCr,     # VideoYCbCr
+#  VideoChSpaceYpCbCr,    # VideoYpCbCr
+#  PrintChSpaceK,         # PrintK
+#  PrintChSpaceCMYeK,     # PrintCMYeK
+#  AudioChSpaceLfe,       # AudioLfe
+#  AudioChSpaceMono,      # AudioMono
+#  AudioChSpaceLeftRight, # AudioLeftRight
+#  AudioChSpaceLfRfLbRb   # AudioLfRfLbRb
+#]
 
 suite "LERoSI Unit Tests":
   var
-    # iio_core globals
+    # backend globals
     testpic_initialized = false
-    testpic: AmBackendCpu[byte]
-    hdrpic: AmBackendCpu[cfloat]
+    testpic: BackendType("*", byte)
+    hdrpic: BackendType("*", cfloat)
     expect_shape: MetadataArray
 
     # IIO/base globals
@@ -65,7 +66,7 @@ suite "LERoSI Unit Tests":
     #ilvdimg: StaticOrderFrame[byte, ChannelSpaceTypeAny, DataInterleaved]
     #dynimg: DynamicOrderFrame[byte, ChannelSpaceTypeAny]
 
-  test "iio_core load test reference image (PNG)":
+  test "picio load test reference image (PNG)":
     try:
       testpic = picio_load_core("test/sample.png")
       hdrpic.backend_source(testpic, x => x.cfloat / 255.0)
@@ -75,29 +76,29 @@ suite "LERoSI Unit Tests":
       testpic_initialized = false
       raise
 
-  template require_equal_extent[T; U](pic: AmBackendCpu[T], expectpic: AmBackendCpu[U]): untyped =
+  template require_equal_extent[T; U](pic: BackendType("*", T), expectpic: BackendType("*", U)): untyped =
     require pic.backend_data_shape[0..1] == expectpic.backend_data_shape[0..1]
 
-  template require_equal_extent[T](pic: AmBackendCpu[T]): untyped =
+  template require_equal_extent[T](pic: BackendType("*", T)): untyped =
     require pic.backend_data_shape[0..1] == testpic.backend_data_shape[0..1]
 
-  template check_equal_extent[T; U](pic: AmBackendCpu[T], expectpic: AmBackendCpu[U]): untyped =
+  template check_equal_extent[T; U](pic: BackendType("*", T), expectpic: BackendType("*", U)): untyped =
     check pic.backend_data_shape[0..1] == expectpic.backend_data_shape[0..1]
 
-  template check_equal_extent[T](pic: AmBackendCpu[T]): untyped =
+  template check_equal_extent[T](pic: BackendType("*", T)): untyped =
     check pic.backend_data_shape[0..1] == testpic.backend_data_shape[0..1]
 
-  template require_consistency[T; U](pic: AmBackendCpu[T], expectpic: AmBackendCpu[U]): untyped =
+  template require_consistency[T; U](pic: BackendType("*", T), expectpic: BackendType("*", U)): untyped =
     require_equal_extent pic, expectpic
     # TODO: Add a histogram check
 
-  template require_consistency[T](pic: AmBackendCpu[T]): untyped =
+  template require_consistency[T](pic: BackendType("*", T)): untyped =
     require_consistency pic, testpic
 
-  template check_consistency[T; U](pic: AmBackendCpu[T], expectpic: AmBackendCpu[U]): untyped =
+  template check_consistency[T; U](pic: BackendType("*", T), expectpic: BackendType("*", U)): untyped =
     check_equal_extent pic, expectpic
 
-  template check_consistency[T](pic: AmBackendCpu[T]): untyped =
+  template check_consistency[T](pic: BackendType("*", T)): untyped =
     check_consistency pic, testpic
 
   #template test_jpeg_decades(fn: untyped): untyped =
@@ -108,7 +109,7 @@ suite "LERoSI Unit Tests":
   #  gn(100); gn(90); gn(80);# gn(70);
   #  #gn(60);  gn(50); gn(40); gn(30);
 
-  test "iio_core obtained test image":
+  test "picio obtained test image":
     require testpic_initialized
   
   test "Backend extent equality":
@@ -117,51 +118,51 @@ suite "LERoSI Unit Tests":
   test "Backend extent identity":
     require_equal_extent testpic
 
-  test "iio_core save BMP":
+  test "picio save BMP":
     require testpic.picio_save_core(
       "test/samplepng-out.bmp",
       SO(format: BMP))
 
-  test "iio_core save PNG":
+  test "picio save PNG":
     require testpic.picio_save_core(
       "test/samplepng-out.png",
       SO(format: PNG, stride: 0))
 
-  test "iio_core save JPEG":
+  test "picio save JPEG":
     require testpic.picio_save_core(
       "test/samplepng-out.jpeg",
       SO(format: JPEG, quality: 100))
 
   # We want to prevent template explosion; this is a big part of
   # why the high level interface should be preferred.
-  proc do_write_jpeg_test[T](pic: AmBackendCpu[T], qual: int): bool =
+  proc do_write_jpeg_test[T](pic: BackendType("*", T), qual: int): bool =
     result = testpic.picio_save_core(
       "test/samplepng-out.q" & $qual & ".jpeg",
       SO(format: JPEG, quality: qual))
 
-  test "iio_core save JPEG quality parameter coverage":
+  test "picio save JPEG quality parameter coverage":
     var n: int = 0
     for qual in countdown(100, 10):
       check do_write_jpeg_test(testpic, qual)
       inc n
     echo "    # Quality variations saved: ", n
 
-  test "iio_core save HDR":
+  test "picio save HDR":
     check picio_save_core(hdrpic,
       "test/samplepng-out.hdr",
       SO(format: HDR))
 
   # Loading
 
-  test "iio_core load BMP":
+  test "picio load BMP":
     let inpic = picio_load_core("test/samplepng-out.bmp")
     check_consistency inpic
     
-  test "iio_core load PNG":
+  test "picio load PNG":
     let inpic = picio_load_core("test/samplepng-out.png")
     check_consistency inpic
 
-  test "iio_core load JPEG":
+  test "picio load JPEG":
     let inpic = picio_load_core("test/samplepng-out.jpeg")
     check_consistency inpic
 
@@ -175,36 +176,36 @@ suite "LERoSI Unit Tests":
   #  result = picio_loadstring_core(res)
 
 
-  test "iio_core load JPEG quality parameter coverage":
+  test "picio load JPEG quality parameter coverage":
     var n: int = 0
     for qual in countdown(100, 10):
       check_consistency do_read_jpeg_test(qual)
       inc n
     echo "    # Quality variations loaded: ", n
 
-  test "iio_core load HDR":
+  test "picio load HDR":
     let inpic = picio_load_hdr_core("test/samplepng-out.hdr")
     check_consistency inpic, hdrpic
 
-  test "iio_core encode and decode BMP in-memory":
+  test "picio encode and decode BMP in-memory":
     let coredata = picio_savestring_core(testpic, SO(format: BMP))
     echo "    # Saved BMP size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.picio_loadstring_core
     check_consistency testpic, recovered
 
-  test "iio_core encode and decode PNG in-memory":
+  test "picio encode and decode PNG in-memory":
     let coredata = picio_savestring_core(testpic, SO(format: PNG, stride: 0))
     echo "    # Saved PNG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.picio_loadstring_core
     check_consistency testpic, recovered
 
-  test "iio_core encode and decode JPEG in-memory":
+  test "picio encode and decode JPEG in-memory":
     let coredata = picio_savestring_core(testpic, SO(format: JPEG, quality: 100))
     echo "    # Saved JPEG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.picio_loadstring_core
     check_consistency testpic, recovered
 
-  test "iio_core encode and decode HDR in-memory":
+  test "picio encode and decode HDR in-memory":
     let coredata = picio_savestring_core(hdrpic, SO(format: HDR))
     echo "    # Saved HDR size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
     let recovered = coredata.picio_loadstring_hdr_core
@@ -456,6 +457,159 @@ suite "LERoSI Unit Tests":
 
   test "img/layout defChannelLayout consistency (subgroups of LfRfLbRbLfe)":
     all_ordinary_subgroups("Audio", "Lf", "Rf", "Lb", "Rb", "Lfe")
+
+  template check_frame_type_consistency(be, acc, U: untyped): untyped =
+    block:
+      var x: FrameType(be, acc, U)
+      check type(x) is FrameType(be, acc, U) and FrameType(be, acc, U) is type(x)
+
+  template check_frame_type_consistency_for_each_access_policy(be, U: untyped): untyped =
+    check_frame_type_consistency(be, "RO", U)
+    check_frame_type_consistency(be, "WO", U)
+    check_frame_type_consistency(be, "RW", U)
+    check_frame_type_consistency(be, "ro", U)
+    check_frame_type_consistency(be, "wo", U)
+    check_frame_type_consistency(be, "rw", U)
+
+  template check_frame_type_access_policy_readable(be, acc, U: untyped; isTrue: bool): untyped =
+    block:
+      var x: FrameType(be, acc, U)
+
+      proc myProc(fr: ReadDataFrame) = discard
+
+      check compiles((x.frame_data)) == isTrue
+      check compiles((myProc(x))) == isTrue
+
+  template check_frame_type_access_policy_writable(be, acc, U: untyped; isTrue: bool): untyped =
+    block:
+      var x: FrameType(be, acc, U)
+      var buf: BackendType(be, U)
+
+      proc myProc(fr: var WriteDataFrame) = discard
+
+      check compiles((x.frame_data = buf)) == isTrue
+      check compiles((myProc(x))) == isTrue
+
+  test "dataframe FrameType consistency for default backend \"*\"":
+    check_frame_type_consistency_for_each_access_policy("*", byte)
+
+  test "dataframe FrameType access policy string \"RO\" is read-only":
+    check_frame_type_access_policy_readable("*", "RO", byte, true)
+    check_frame_type_access_policy_writable("*", "RO", byte, false)
+
+  test "dataframe FrameType access policy string \"ro\" is read-only":
+    check_frame_type_access_policy_readable("*", "ro", byte, true)
+    check_frame_type_access_policy_writable("*", "ro", byte, false)
+
+  test "dataframe FrameType access policy string \"R\" is read-only":
+    check_frame_type_access_policy_readable("*", "R", byte, true)
+    check_frame_type_access_policy_writable("*", "R", byte, false)
+
+  test "dataframe FrameType access policy string \"r\" is read-only":
+    check_frame_type_access_policy_readable("*", "r", byte, true)
+    check_frame_type_access_policy_writable("*", "r", byte, false)
+
+  test "dataframe FrameType access policy string \"WO\" is write-only":
+    check_frame_type_access_policy_readable("*", "WO", byte, false)
+    check_frame_type_access_policy_writable("*", "WO", byte, true)
+
+  test "dataframe FrameType access policy string \"wo\" is write-only":
+    check_frame_type_access_policy_readable("*", "wo", byte, false)
+    check_frame_type_access_policy_writable("*", "wo", byte, true)
+
+  test "dataframe FrameType access policy string \"W\" is write-only":
+    check_frame_type_access_policy_readable("*", "W", byte, false)
+    check_frame_type_access_policy_writable("*", "W", byte, true)
+
+  test "dataframe FrameType access policy string \"w\" is write-only":
+    check_frame_type_access_policy_readable("*", "w", byte, false)
+    check_frame_type_access_policy_writable("*", "w", byte, true)
+
+  test "dataframe FrameType access policy string \"RW\" is read-write":
+    check_frame_type_access_policy_readable("*", "RW", byte, true)
+    check_frame_type_access_policy_writable("*", "RW", byte, true)
+
+  test "dataframe FrameType access policy string \"rw\" is read-write":
+    check_frame_type_access_policy_readable("*", "rw", byte, true)
+    check_frame_type_access_policy_writable("*", "rw", byte, true)
+
+  test "dataframe FrameType access policy string \"WR\" is read-write":
+    check_frame_type_access_policy_readable("*", "WR", byte, true)
+    check_frame_type_access_policy_writable("*", "WR", byte, true)
+
+  test "dataframe FrameType access policy string \"wr\" is read-write":
+    check_frame_type_access_policy_readable("*", "wr", byte, true)
+    check_frame_type_access_policy_writable("*", "wr", byte, true)
+
+  test "dataframe initFrame":
+    var mySeq = toSeq(1..75)
+    var myFrame: FrameType("*", "rw", int)
+    initFrame myFrame, DataPlanar, mySeq, 3, 5, 5
+
+    check myFrame.frame_order == DataPlanar
+    check backend_data_raw(myFrame.frame_data) == mySeq
+
+  test "dataframe storage order rotation shape consistency":
+    var mySeq = toSeq(1..75)
+    var myFrame: FrameType("*", "rw", int)
+    initFrame myFrame, DataPlanar, mySeq, 3, 5, 5
+
+    var myInterleavedFrame = myFrame.interleaved
+    check myInterleavedFrame.shape == myFrame.shape
+
+  test "dataframe storage order rotation data consistency":
+    var mySeq = toSeq(1..75)
+    var myFrame: FrameType("*", "rw", int)
+    initFrame myFrame, DataPlanar, mySeq, 3, 5, 5
+
+    var myInterleavedFrame = myFrame.interleaved
+
+    for i in 0..2:
+      check myInterleavedFrame.channel(i).slice_data == myFrame.channel(i).slice_data
+
+  template checkFrame(myFrame: untyped): untyped =
+    check myFrame.interleaved.shape == expect_shape[0..1]
+    check myFrame.planar.shape == expect_shape[0..1]
+
+    for i in 0..2:
+      let
+        data1 = myFrame.interleaved.channel(i).slice_data
+        data2 = myFrame.planar.channel(i).slice_data
+      check data1 == data2
+
+  test "dataframe image from picio":
+    var myFrame: FrameType("*", "rw", byte)
+    var myImgData: seq[byte]
+    var h, w, ch: int
+
+    picio_load_core3_file_by_type("test/sample.png", h, w, ch, myImgData)
+    initFrame myFrame, DataInterleaved, myImgData, [h, w, ch]
+
+    checkFrame myFrame
+
+  test "picture readPictureFile dataframe check":
+    #var myImage: DynamicImageType("*", "rw", byte)
+    let myImage = readPictureFile(byte, "*", "test/sample.png")
+
+    checkFrame myImage.data_frame
+
+  test "picture writePicture/readPictureData dataframe check":
+    #var myImage: DynamicImageType("*", "rw", byte)
+
+    let myImage = readPictureFile(byte, "*", "test/sample.png")
+    let coredata = myImage.writePicture(SO(format: JPEG))
+    
+    #var myMirror: DynamicImageType("*", "rw", byte)
+    let myMirror = readPictureData(byte, "*", coredata)
+    
+    checkFrame myImage.data_frame
+    checkFrame myMirror.data_frame
+
+
+
+  #test "img initRawImageObject":
+  #  var mySeq = toSeq(1..75)
+  #  var img = initRawImageObject("am", mySeq, [5, 5])
 
 
   # 

@@ -27,14 +27,16 @@ import system, macros, sequtils, strutils, tables
 
 import ./macroutil
 
-var backendIndex {.compileTime.} = initTable[string, int]()
-var defaultBackendId {.compileTime.} = -1 # Should be >= 0 by end of file.
+var backendIndex      {.compileTime.} = initTable[string, int]()
+var defaultBackendId  {.compileTime.} = -1 # Should be >= 0 by end of file.
+var fallbackBackendId {.compileTime.} = -1 # Should be >= 0 by end of file.
 
 var backendNames {.compileTime.} = newSeq[string]()
 var be_datatypes {.compileTime.} = newSeq[string]()
 var be_slicetypes {.compileTime.} = newSeq[string]()
+var be_shapetypes {.compileTime.} = newSeq[string]()
 
-proc insertBackend(name, dataname, slicename: string): int {.compileTime.} =
+proc insertBackend(name, dataname, slicename, shapename: string): int {.compileTime.} =
   result = backendNames.len
   backendIndex[name] = result
   if defaultBackendId < 0:
@@ -42,12 +44,19 @@ proc insertBackend(name, dataname, slicename: string): int {.compileTime.} =
   backendNames.add name
   be_datatypes.add dataname
   be_slicetypes.add slicename
+  be_shapetypes.add shapename
 
 proc setDefaultBackend(name: string) {.compileTime.} =
   if name in backendIndex:
     defaultBackendId = backendIndex[name]
   else:
-    quit "LERoSI: Cannot set backend to " & name & " because no such backend exists."
+    quit "LERoSI: Cannot set default backend to " & name & " because no such backend exists."
+
+proc setFallbackBackend(name: string) {.compileTime.} =
+  if name in backendIndex:
+    fallbackBackendId = backendIndex[name]
+  else:
+    quit "LERoSI: Cannot set fallback backend to " & name & " because no such backend exists."
 
 proc BackendDesc_impl(name: string): string {.compileTime.} =
   if name in backendIndex:
@@ -63,7 +72,15 @@ proc SliceDesc_impl(name: string): string {.compileTime.} =
   elif name == "*":
     result = be_slicetypes[defaultBackendId]
   else:
-    quit "LERoSI: requested type of unknown backend " & name & "."
+    quit "LERoSI: requested slice type of unknown backend " & name & "."
+
+proc ShapeDesc_impl(name: string): string {.compileTime.} =
+  if name in backendIndex:
+    result = be_shapetypes[backendIndex[name]]
+  elif name == "*":
+    result = be_shapetypes[defaultBackendId]
+  else:
+    quit "LERoSI: requested shape type of unknown backend " & name & "."
 
 proc BackendId_impl(name: string): int {.compileTime.} =
   if name in backendIndex:
@@ -77,7 +94,7 @@ proc BackendName_impl(id: int): string {.compileTime.} =
   else:
     ""
 
-proc BackendType_impl(name: string; T: NimNode): NimNode {.compileTime.} =
+proc BackendTypeNode*(name: string; T: NimNode): NimNode {.compileTime.} =
   let
     typename = BackendDesc_impl name
     typeident = ident(typename)
@@ -86,9 +103,10 @@ proc BackendType_impl(name: string; T: NimNode): NimNode {.compileTime.} =
   result = typeexpr
 
 macro BackendType*(name, T: untyped): untyped =
-  result = BackendType_impl($name, T)
+  ## Backend type selector
+  result = BackendTypeNode($name, T)
 
-proc SliceType_impl(name: string; T: NimNode): NimNode {.compileTime.} =
+proc SliceTypeNode*(name: string; T: NimNode): NimNode {.compileTime.} =
   let
     typename = SliceDesc_impl name
     typeident = ident(typename)
@@ -97,15 +115,29 @@ proc SliceType_impl(name: string; T: NimNode): NimNode {.compileTime.} =
   result = typeexpr
 
 macro SliceType*(name, T: untyped): untyped =
-  result = SliceType_impl($name, T)
+  ## Backend slice type selector
+  result = SliceTypeNode($name, T)
 
-macro declareBackend(name, dataname, slicename: untyped): untyped =
+proc ShapeTypeNode*(name: string; T: NimNode): NimNode {.compileTime.} =
+  let
+    typename = ShapeDesc_impl name
+    typeident = ident(typename)
+    typeexpr = nnkBracketExpr.newTree(typeident, T.copy)
+
+  result = typeexpr
+
+macro ShapeType*(name, T: untyped): untyped =
+  ## Backend slice type selector
+  result = ShapeTypeNode($name, T)
+
+macro declareBackend(name, dataname, slicename, shapename: untyped): untyped =
   let
     sname = nodeToStr(name)
     sdataname = nodeToStr(dataname)
     sslicename = nodeToStr(slicename)
+    sshapename = nodeToStr(shapename)
 
-    be_index = insertBackend(sname, sdataname, sslicename)
+    be_index = insertBackend(sname, sdataname, sslicename, sshapename)
 
     gentype_ident = ident"T"
 
@@ -135,7 +167,7 @@ when not declared(lerosiDisableAmBackend):
   import ./backend/am
   export am
 
-  declareBackend "am", "AmBackendCpu", "AmSliceCpu"
+  declareBackend "am", "AmBackendCpu", "AmSliceCpu", "AmShape"
   static: setDefaultBackend "am"
 
   #declareBackend "am_cuda", "AmBackendCuda", "AmSliceCuda"
@@ -150,6 +182,6 @@ when declared(lerosiFallbackBackend):
   import ./backend/fallback
   export fallback
 
-  declareBackend "fallback", "ArrayRefBackend", "ArrayRefSlice"
-  static: setDefaultBackend "fallback"
+  declareBackend "fallback", "FbBackend", "FbSlice", "FbShape"
+  static: setFallbackBackend "fallback"
 

@@ -27,45 +27,31 @@ import system
 import ./macroutil
 import ./fixedseq
 import ./spaceconf
+import ./backend
 
 export spaceconf
 
 type
   RWFrameObject*[Backend] = object of RootObj
     ## Readable and writable concrete frame object,
-    ## intended for inplace manipulation. Does not
-    ## have ordering data.
+    ## intended for inplace manipulation.
+    ## Has ordering metadata.
     dat: Backend
+    ordr: DataOrder
 
   ROFrameObject*[Backend] = object of RootObj
     ## Read only concrete frame object, intended
-    ## for streaming input interfaces. Does not
-    ## have ordering data.
+    ## for streaming input interfaces.
+    ## Has ordering metadata.
     dat: Backend
+    ordr: DataOrder
 
   WOFrameObject*[Backend] = object of RootObj
     ## Write only concrete frame object, intended
-    ## for streaming output interfaces. Does not
-    ## have ordering data
+    ## for streaming output interfaces.
+    ## Has ordering metadata.
     dat: Backend
-
-  OrderedFrame[FrameType] = object of FrameType
     ordr: DataOrder
-
-  OrderedRWFrameObject*[Backend] = OrderedFrame[RWFrameObject[Backend]]
-    ## Readable and writable concrete frame object,
-    ## intended for inplace manipulation. Carries
-    ## ordering metadata.
-
-  OrderedROFrameObject*[Backend] = OrderedFrame[ROFrameObject[Backend]]
-    ## Read only concrete frame object, intended
-    ## for streaming input interfaces. Carries
-    ## ordering metadata.
-
-  OrderedWOFrameObject*[Backend] = OrderedFrame[WOFrameObject[Backend]]
-    ## Write only concrete frame object, intended
-    ## for streaming output interfaces. Carries
-    ## ordering metadata.
 
 
 proc frame_data*[U: ROFrameObject|RWFrameObject](frame: U): U.Backend =
@@ -76,7 +62,7 @@ proc frame_data*[U: RWFrameObject](frame: var U): var U.Backend =
   ## Frame data mutable accessor for read-write data frame objects.
   result = frame.dat
 
-proc frame_order*[U: OrderedFrame](frame: U): DataOrder =
+proc frame_order*[U: ROFrameObject|WOFrameObject|RWFrameObject](frame: U): DataOrder =
   ## Get the ordering of any frame object, including write only frame objects.
   ## This is neccesary to determine what the ordering of the data to write must
   ## be.
@@ -87,47 +73,120 @@ proc `frame_data=`*[U: RWFrameObject|WOFrameObject](frame: var U,
   ## Frame data setter for writable data frames.
   frame.dat = data
 
-proc `frame_order=`*[U: OrderedRWFrameObject|OrderedWOFrameObject](
-    frame: U; order: DataOrder) =
+proc `frame_order=`*[U: RWFrameObject|WOFrameObject](
+    frame: var U; order: DataOrder) =
   ## Set the ordering of a writable frame object. Note that this will not
   ## rotate the storage order for any data written; it is the responsibility
   ## of the caller to ensure that the written data are in the right order.
   frame.ordr = order
 
 
+proc FrameTypeNode*(name, access: string, T: NimNode): NimNode {.compileTime.} =
+  let
+    betype = BackendTypeNode(name, T)
+    upperAccess = access.toUpperAscii
+
+  case upperAccess:
+    of "RO", "R":  result = nnkBracketExpr.newTree(bindSym"ROFrameObject", betype)
+    of "WO", "W":  result = nnkBracketExpr.newTree(bindSym"WOFrameObject", betype)
+    of "RW", "WR": result = nnkBracketExpr.newTree(bindSym"RWFrameObject", betype)
+    else:
+      quit "Invalid access descriptor string " & access & " for FrameType " & name & "."
+
+macro FrameType*(name, access, T: untyped): untyped =
+  ## Backend type selector
+  result = FrameTypeNode($name, $access, T)
+
 type
-  ReadDataFrame*[Backend] = concept frame
-    ## A readable DataFrame, having a frame_data getter yielding a Backend.
-    frame.frame_data is Backend
+  ReadDataFrame*[B] = ROFrameObject[B]|RWFrameObject[B]
+  WriteDataFrame*[B] = WOFrameObject[B]|RWFrameObject[B]
+  ReadOnlyDataFrame*[B] = ROFrameObject[B]
+  WriteOnlyDataFrame*[B] = WOFrameObject[B]
+  DataFrame*[B] = ROFrameObject[B]|WOFrameObject[B]|RWFrameObject[B]
+  #ReadDataFrame*[Backend] = concept frame
+  #  ## A readable DataFrame, having a frame_data getter yielding a Backend.
+  #  frame.frame_data is Backend
+  #  frame.frame_order is DataOrder
 
-  WriteDataFrame*[Backend] = concept frame
-    ## A writable DataFrame, having a frame_data setter accepting a Backend.
-    frame.frame_data = Backend
-    
-  DataFrame*[Backend] = concept frame
-    ## A readable or writable DataFrame
-    frame is ReadDataFrame[Backend] or frame is WriteDataFrame[Backend]
+  #WriteDataFrame*[Backend] = concept frame
+  #  ## A writable DataFrame, having a frame_data setter accepting a Backend.
+  #  frame.frame_data = Backend
+  #  frame.frame_order = DataOrder
+  #  
+  #DataFrame*[Backend] = concept frame
+  #  ## A readable or writable DataFrame
+  #  frame is ReadDataFrame[Backend]|WriteDataFrame[Backend]
 
-  ReadOnlyDataFrame*[Backend] = concept frame
-    ## A readable data frame which is not writable.
-    frame is ReadDataFrame[Backend]
-    not (frame is WriteDataFrame[Backend])
+  #ReadOnlyDataFrame*[Backend] = concept frame
+  #  ## A readable data frame which is not writable.
+  #  frame is ReadDataFrame[Backend]
+  #  not (frame is WriteDataFrame[Backend])
 
-  WriteOnlyDataFrame*[Backend] = concept frame
-    ## A writable data frame which is not readable.
-    frame is WriteDataFrame[Backend]
-    not (frame is ReadDataFrame[Backend])
+  #WriteOnlyDataFrame*[Backend] = concept frame
+  #  ## A writable data frame which is not readable.
+  #  frame is WriteDataFrame[Backend]
+  #  not (frame is ReadDataFrame[Backend])
 
-  OrderedDataFrame*[Backend] = concept frame
-    ## A data frame with an associated data ordering.
-    frame is DataFrame[Backend]
-    frame.frame_order is DataOrder
 
-  UnorderedDataFrame*[Backend] = concept frame
-    ## A data frame with no associated data ordering.
-    frame is DataFrame[Backend]
-    not (frame is OrderedDataFrame[Backend])
+proc initFrame*[U; T](result: var U; order: DataOrder; dat: seq[T], sh: varargs[int]) {.inline.} =
+  backend_data_raw(result.dat, dat, sh)
+  result.ordr = order
 
+#proc initFrame*[U: DataFrame; Storage](result: var U; order: DataOrder; dat: Storage) {.inline.} =
+#  backend_data(result.dat, dat)
+#  result.order = order
+
+
+proc interleaved*[U: DataFrame](frame: U): U {.inline, noSideEffect.} =
+  ## Rotate to interleaved storage order.
+  result.ordr = DataInterleaved
+  case frame.ordr:
+    of DataPlanar:
+      result.dat = backend_rotate_interleaved(frame.dat)
+    of DataInterleaved:
+      result.dat = frame.dat
+
+
+proc planar*[U: DataFrame](frame: U): U {.inline, noSideEffect.} =
+  ## Rotate to interleaved storage order.
+  result.ordr = DataPlanar
+  case frame.ordr:
+    of DataInterleaved:
+      result.dat = frame.dat
+      result.dat = backend_rotate_planar(result.dat)
+    of DataPlanar:
+      result.dat = frame.dat
+
+
+proc ordered*[U: DataFrame](frame: U; order: DataOrder): U {.inline, noSideEffect.} =
+  if not (result.ordr == order):
+    result.dat = frame.dat
+    result.dat = backend_rotate(result.dat, order)
+    result.ordr = order
+
+
+proc shape*[U: DataFrame](frame: U): auto =
+  case frame.ordr:
+    of DataInterleaved:
+      result = backend_data_shape(frame.dat)
+      result = result[0..result.len - 2]
+    of DataPlanar:
+      result = backend_data_shape(frame.dat)
+      result = result[1..result.len - 1]
+
+
+proc channel_count*[U: DataFrame](frame: U): auto =
+  case frame.ordr:
+    of DataInterleaved:
+      let v = backend_data_shape(frame.dat)
+      result = v[v.len - 1]
+    of DataPlanar:
+      let v = backend_data_shape(frame.dat)
+      result = v[0]
+
+
+proc channel*[U: DataFrame](frame: U; i: int): auto {.inline.} =
+  slice_channel frame.dat, frame.ordr, i
 
 
 when isMainModule:

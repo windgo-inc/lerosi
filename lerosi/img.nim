@@ -47,7 +47,6 @@ type
     lay: ChannelLayout
     fr: Frame
 
-
 proc defChannelLayout*(
     cs: ChannelSpace; m: ChannelMap):
     ChannelLayout {.eagerCompile, inline.} =
@@ -60,6 +59,41 @@ proc defChannelLayout*(
 
   result.cspace = cs
   result.mapping = m
+
+
+
+#proc initRawImageObjectImpl*[Frame: DataFrame; T](result: var RawImageObject[Frame], data: seq[T], sh: varargs[int]) =
+#  ## Initialize a raw image object from a raw data.
+#  backend_data_raw(result.fr.frame_data(), data, sh)
+#
+#template initRawImageObject*[T](Frame: typedesc[DataFrame], data: seq[T], sh: varargs[int]): untyped =
+#  block:
+#    var fr: Frame
+#    initRawImageObjectImpl[Frame](fr, data, sh)
+#    fr
+#
+#proc initRawImageObject*[Frame: DataFrame](fr: Frame): RawImageObject[Frame] =
+#  ## Initialize a raw image object from an existing frame.
+#  result.fr = fr
+#
+#
+#proc toDynamic*[Frame: DataFrame](obj: RawImageObject[Frame],
+#    lay: ChannelLayout): DynamicImageObject[Frame] =
+#  ## Convert a RawImageObject in to a DynamicImageObject with associated
+#  ## layout information.
+#  result.fr = obj.fr
+#  result.lay = lay
+#
+#
+#template initDynamicImageObject*[T](name: string; lay: ChannelLayout; data: seq[T]; sh: varargs[int]): untyped =
+#  toDynamic(initRawImageObject(RWFrameObject[BackendType(name, T)], data, sh), lay)
+#
+#template initDynamicImageObject*[T](name: string; lay: string; data: seq[T]; sh: varargs[int]): untyped =
+#  toDynamic(initRawImageObject(RWFrameObject[BackendType(name, T)], data, sh), defChannelLayout(lay))
+
+
+proc initDynamicImageObject*[Img: DynamicImageObject](result: var Img, layout: ChannelLayout) =
+  result.lay = layout
 
 
 proc channelspace*(layout: ChannelLayout):
@@ -101,14 +135,6 @@ type
   BaseImage*[Frame] = concept img
     img.data_frame is Frame
 
-  OrderedImage*[Frame] = concept img
-    img is BaseImage[Frame]
-    img.data_frame is OrderedDataFrame
-
-  UnorderedImage*[Frame] = concept img
-    img is BaseImage[Frame]
-    img.data_frame is UnorderedDataFrame
-
   WriteOnlyImage*[Frame] = concept img
     img is BaseImage[Frame]
     img.data_frame is WriteOnlyDataFrame
@@ -137,6 +163,12 @@ type
   UnstructuredImage*[Frame] = concept img
     img is BaseImage[Frame]
     not (img is StructuredImage[Frame])
+
+template RawImageType*(name, access: string; T: untyped): untyped =
+  RawImageObject[FrameType(name, access, T)]
+
+template DynamicImageType*(name, access: string; T: untyped): untyped =
+  DynamicImageObject[FrameType(name, access, T)]
 
 import ./img/layout
 import ./img/sampling

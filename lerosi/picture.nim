@@ -39,53 +39,68 @@ const
   ]
 
 
-proc wrap_stbi_loadedlayout_ranged(channels: range[1..4]):
-    ChannelSpace {.noSideEffect, inline, raises: [].} =
-  loaded_channel_layouts[channels - 1]
+export dataframe, picio, img
+
+#template initImageFromBackend*[T](name: string, data: openarray[T], h, w, ch: int): untyped =
+#  initDynamicImage(name, T, 
 
 
-proc wrap_stbi_loadedlayout(channels: int):
-    ChannelSpace {.noSideEffect, inline.} =
+template readPictureImpl*(isData: bool; T, name, res: untyped): untyped =
+  block:
+    var r: DynamicImageType(name, "RW", T)
+    var h, w, ch: int
 
-  if channels >= 1 and channels <= 4:
-    # Compiler has proof that channels is in range by getting here.
-    result = wrap_stbi_loadedlayout_ranged(channels)
-  else:
-    raise newException(IIOError,
-      "wrap_stbi_loadedlayout: Channel count must be between 1 and 4.")
+    when isData:
+      when res is string:
+        when T is byte:
+          var sq = picio_loadstring_core2(res, h, w, ch)
+        elif T is SomeReal:
+          var sq = picio_loadstring_hdr_core2(res, h, w, ch)
+      else:
+        # Why are sequences causing a getAuxTypeDesc crash?
+        when T is byte:
+          var sq = picio_load_core2(res, h, w, ch)
+        elif T is SomeReal:
+          var sq = picio_load_hdr_core2(res, h, w, ch)
+    else:
+      var sq = newSeq[T]()
+      picio_load_core3_file_by_type(res, h, w, ch, sq)
+
+    initFrame[FrameType(name, "RW", T), T](r.data_frame, DataInterleaved, sq, [h, w, ch])
+    initDynamicImageObject(r, loaded_channel_layouts[ch - 1])
+    r
+
+template readPictureFile*(T: typedesc; name: untyped; filename: string): untyped =
+  ## read a picture from a file
+  readPictureImpl(false, T, name, filename)
+
+template readPictureData*(T: typedesc; name: untyped; data: seq[byte]): untyped =
+  ## read a picture from core memory
+  readPictureImpl(true, T, name, data)
+  
+template readPictureData*(T: typedesc; name: untyped; data: string): untyped =
+  ## read a picture from core memory
+  readPictureImpl(true, T, name, data)
 
 
-proc readImageImpl*[T: SomeNumber; B](
-    filename: string): DynamicImageObject[OrderedRWFrameObject[B]] =
-  discard # TODO
-
-
-proc readImage*[T: SomeNumber](filename: string): StaticOrderFrame[T, ChannelSpaceTypeAny, DataInterleaved] =
-  let data = filename.imageio_load_core
-  init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
-
-proc readImage*[T: SomeNumber](resource: openarray[byte]): StaticOrderFrame[T, ChannelSpaceTypeAny, DataInterleaved] =
-  let data = resource.imageio_load_core
-  init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
-
-proc readHdrImage*[T: SomeReal](filename: string): StaticOrderFrame[T, ChannelSpaceTypeAny, DataInterleaved] =
-  let data = filename.imageio_load_hdr_core
-  init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
-
-proc readHdrImage*[T: SomeReal](resource: openarray[byte]): StaticOrderFrame[T, ChannelSpaceTypeAny, DataInterleaved] =
-  let data = resource.imageio_load_hdr_core
-  init_image_storage(result, wrap_stbi_loadedlayout(data.shape[^1]), data=data.asType(T))
-
-proc writeImage*(image: SomeImage;
+proc writePicture*[U](image: U;
                 opts: SaveOptions = SaveOptions(nil)):
-                seq[byte] {.imageProc.} =
-  imageio_save_core(interleaved(image).data, opts)
+                string =
+  ## write a picture to core memory
+  let ilvd = image.data_frame.interleaved
+  let ilvdshape = ilvd.shape
+  let innerdata = ilvd.frame_data().backend_data_raw
+  picio_savestring_core2(innerdata, ilvdshape[0], ilvdshape[1], ilvd.channel_count, opts)
 
-proc writeImage*(image: SomeImage;
+proc writePicture*[U](image: U;
                 filename: string;
                 opts: SaveOptions = SaveOptions(nil)):
-                bool {.imageProc.} =
-  imageio_save_core(interleaved(image).data, filename, opts)
+                bool =
+  ## write a picture to a file
+  let ilvd = image.data_frame.interleaved
+  let ilvdshape = ilvd.shape
+  let innerdata = ilvd.frame_data().backend_data_raw
+  picio_save_core2(innerdata, ilvdshape[0], ilvdshape[1], ilvd.channel_count, filename, opts)
 
 
 
