@@ -171,41 +171,41 @@ proc BackendName_impl(id: int): string {.compileTime.} =
   else:
     ""
 
-proc BackendTypeNode*(name: string; T: NimNode): NimNode {.compileTime.} =
+proc BackendTypeNode*(key: int|string|NimNode; T: NimNode): NimNode {.compileTime.} =
   let
-    typename = BackendDesc_impl name
+    typename = BackendDesc_impl key
     typeident = ident(typename)
     typeexpr = nnkBracketExpr.newTree(typeident, T.copy)
 
   result = typeexpr
 
-macro BackendType*(name, T: untyped): untyped =
+macro BackendType*(key, T: untyped): untyped =
   ## Backend type selector
-  result = BackendTypeNode($name, T)
+  result = BackendTypeNode(key, T)
 
-proc SliceTypeNode*(name: string; T: NimNode): NimNode {.compileTime.} =
+proc SliceTypeNode*(key: int|string|NimNode; T: NimNode): NimNode {.compileTime.} =
   let
-    typename = SliceDesc_impl name
+    typename = SliceDesc_impl key
     typeident = ident(typename)
     typeexpr = nnkBracketExpr.newTree(typeident, T.copy)
 
   result = typeexpr
 
-macro SliceType*(name, T: untyped): untyped =
+macro SliceType*(key, T: untyped): untyped =
   ## Backend slice type selector
-  result = SliceTypeNode($name, T)
+  result = SliceTypeNode(key, T)
 
-proc ShapeTypeNode*(name: string; T: NimNode): NimNode {.compileTime.} =
+proc ShapeTypeNode*(key: int|string|NimNode; T: NimNode): NimNode {.compileTime.} =
   let
-    typename = ShapeDesc_impl name
+    typename = ShapeDesc_impl key
     typeident = ident(typename)
     typeexpr = nnkBracketExpr.newTree(typeident, T.copy)
 
   result = typeexpr
 
-macro ShapeType*(name, T: untyped): untyped =
+macro ShapeType*(key, T: untyped): untyped =
   ## Backend slice type selector
-  result = ShapeTypeNode($name, T)
+  result = ShapeTypeNode(key, T)
 
 macro declareBackend(name, dataname, slicename, shapename: untyped): untyped =
   let
