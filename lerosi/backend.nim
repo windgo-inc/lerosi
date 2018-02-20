@@ -27,66 +27,143 @@ import system, macros, sequtils, strutils, tables
 
 import ./macroutil
 
-var backendIndex      {.compileTime.} = initTable[string, int]()
-var defaultBackendId  {.compileTime.} = -1 # Should be >= 0 by end of file.
-var fallbackBackendId {.compileTime.} = -1 # Should be >= 0 by end of file.
+var backendIndex           {.compileTime.} = initTable[string, int]()
+var backendByTypenameIndex {.compileTime.} = initTable[string, int]()
+var defaultBackendId       {.compileTime.} = -1 # Should be >= 0 by end of file.
+var fallbackBackendId      {.compileTime.} = -1 # Should be >= 0 by end of file.
 
 var backendNames {.compileTime.} = newSeq[string]()
 var be_datatypes {.compileTime.} = newSeq[string]()
 var be_slicetypes {.compileTime.} = newSeq[string]()
 var be_shapetypes {.compileTime.} = newSeq[string]()
 
+proc lookupBackendIndexImpl(i: int): int {.compileTime.} =
+  result = if i < 0 or i >= backendNames.len: -1 else: i
+
+proc lookupBackendIndexImpl(node: NimNode): int {.compileTime.} =
+  result = -1 # By default.
+  case node.kind:
+    of nnkLiterals:
+      case node.kind:
+        of nnkStrLit, nnkRStrLit, nnkTripleStrLit:
+          # We are naming a backend.
+          let str = $node
+          if str == "*": # "*" names the default backend.
+            result = defaultBackendId
+          elif str in backendIndex:
+            result = backendIndex[str]
+        else: # It is probably a numeric literal.
+          try:
+            result = int(node.intVal)
+          except:
+            try:
+              result = int(node.floatVal)
+            except:
+              result = -1
+            
+          if result < -1 or result >= backendNames.len:
+            result = -1
+    of nnkIdent:
+      # We are looking for a backend with a type.
+      let str = $node
+      if str in backendByTypenameIndex:
+        result = backendByTypenameIndex[str]
+    else:
+      # We are looking for a backend with a complex type expression.
+      # TODO: Improve implementation, this is pretty ad-hoc.
+      try:
+        let str = $(node[0])
+        if str in backendByTypenameIndex:
+          result = backendByTypenameIndex[str]
+        if result < 0:
+          result = lookupBackendIndexImpl(node[0])
+      except:
+        discard
+
+proc lookupBackendIndexImpl(name: string): int {.compileTime.} =
+  lookupBackendIndexImpl(newStrLitNode(name))
+
+proc lookupBackendIndex(id: string|int|NimNode): int {.compileTime.} =
+  # Use the implementation to try to find a match.
+  result = lookupBackendIndexImpl(id)
+  if result == -1 and 0 <= fallbackBackendId:
+    # Use the fallback.
+    result = fallbackBackendId
+
 proc insertBackend(name, dataname, slicename, shapename: string): int {.compileTime.} =
-  result = backendNames.len
-  backendIndex[name] = result
-  if defaultBackendId < 0:
-    defaultBackendId = result
-  backendNames.add name
-  be_datatypes.add dataname
-  be_slicetypes.add slicename
-  be_shapetypes.add shapename
+  if not (name in backendIndex):
+    result = backendNames.len
+
+    # add the name to the 'by name' index.
+    backendIndex[name] = result
+
+    # add the typenames to the 'by typename' index.
+    backendByTypenameIndex[dataname] = result
+    backendByTypenameIndex[slicename] = result
+    backendByTypenameIndex[shapename] = result
+
+    if fallbackBackendId < 0:
+      fallbackBackendId = result
+
+    if defaultBackendId < 0:
+      defaultBackendId = result
+
+    # add the name and typenames to the sequences indexed by the backend
+    # tables.
+    backendNames.add name
+    be_datatypes.add dataname
+    be_slicetypes.add slicename
+    be_shapetypes.add shapename
+  else:
+    quit "LERoSI: Duplicate backend registered for \"" & name & "\"."
+
+template backend_key_human(id: untyped): untyped =
+  when id is int:
+    "backend with id " & $id
+  elif id is string:
+    "backend named \"" & id & "\""
+  elif id is NimNode:
+    "backend associated with \"" & toStrLit(id).strVal & "\""
 
 proc setDefaultBackend(name: string) {.compileTime.} =
   if name in backendIndex:
     defaultBackendId = backendIndex[name]
   else:
-    quit "LERoSI: Cannot set default backend to " & name & " because no such backend exists."
+    quit "LERoSI: Cannot set " & backend_key_human(name) & " as default backend because no such backend exists."
 
 proc setFallbackBackend(name: string) {.compileTime.} =
   if name in backendIndex:
     fallbackBackendId = backendIndex[name]
   else:
-    quit "LERoSI: Cannot set fallback backend to " & name & " because no such backend exists."
+    quit "LERoSI: Cannot set " & backend_key_human(name) & " as fallback backend because no such backend exists."
 
-proc BackendDesc_impl(name: string): string {.compileTime.} =
-  if name in backendIndex:
-    result = be_datatypes[backendIndex[name]]
-  elif name == "*":
-    result = be_datatypes[defaultBackendId]
+proc BackendDesc_impl(id: int|string|NimNode): string {.compileTime.} =
+  let i = lookupBackendIndex(id)
+  if 0 <= i:
+    result = be_datatypes[i]
   else:
-    quit "LERoSI: requested type of unknown backend " & name & "."
+    quit "LERoSI: requested type of unknown " & backend_key_human(id) & "."
 
-proc SliceDesc_impl(name: string): string {.compileTime.} =
-  if name in backendIndex:
-    result = be_slicetypes[backendIndex[name]]
-  elif name == "*":
-    result = be_slicetypes[defaultBackendId]
+proc SliceDesc_impl(id: int|string|NimNode): string {.compileTime.} =
+  let i = lookupBackendIndex(id)
+  if 0 <= i:
+    result = be_slicetypes[i]
   else:
-    quit "LERoSI: requested slice type of unknown backend " & name & "."
+    quit "LERoSI: requested slice type of unknown " & backend_key_human(id) & "."
 
-proc ShapeDesc_impl(name: string): string {.compileTime.} =
-  if name in backendIndex:
-    result = be_shapetypes[backendIndex[name]]
-  elif name == "*":
-    result = be_shapetypes[defaultBackendId]
+proc ShapeDesc_impl(id: int|string|NimNode): string {.compileTime.} =
+  let i = lookupBackendIndex(id)
+  if 0 <= i:
+    result = be_shapetypes[i]
   else:
-    quit "LERoSI: requested shape type of unknown backend " & name & "."
+    quit "LERoSI: requested shape type of unknown " & backend_key_human(id) & "."
 
-proc BackendId_impl(name: string): int {.compileTime.} =
-  if name in backendIndex:
-    backendIndex[name]
-  else:
-    -1
+proc BackendId_impl(id: int|string|NimNode): int {.compileTime.} =
+  result = lookupBackendIndex(id)
+
+proc BackendName_impl(id: string|NimNode): string {.compileTime.} =
+  let i = lookupBackendIndex(id)
+  result = if 0 <= i: backendNames[i] else: ""
 
 proc BackendName_impl(id: int): string {.compileTime.} =
   if 0 <= id and id < backendNames.len:

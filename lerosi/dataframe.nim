@@ -32,21 +32,21 @@ import ./backend
 export spaceconf
 
 type
-  RWFrameObject*[Backend] = object of RootObj
+  RWFrameObject*[Backend] = object
     ## Readable and writable concrete frame object,
     ## intended for inplace manipulation.
     ## Has ordering metadata.
     dat: Backend
     ordr: DataOrder
 
-  ROFrameObject*[Backend] = object of RootObj
+  ROFrameObject*[Backend] = object
     ## Read only concrete frame object, intended
     ## for streaming input interfaces.
     ## Has ordering metadata.
     dat: Backend
     ordr: DataOrder
 
-  WOFrameObject*[Backend] = object of RootObj
+  WOFrameObject*[Backend] = object
     ## Write only concrete frame object, intended
     ## for streaming output interfaces.
     ## Has ordering metadata.
@@ -103,29 +103,6 @@ type
   ReadOnlyDataFrame*[B] = ROFrameObject[B]
   WriteOnlyDataFrame*[B] = WOFrameObject[B]
   DataFrame*[B] = ROFrameObject[B]|WOFrameObject[B]|RWFrameObject[B]
-  #ReadDataFrame*[Backend] = concept frame
-  #  ## A readable DataFrame, having a frame_data getter yielding a Backend.
-  #  frame.frame_data is Backend
-  #  frame.frame_order is DataOrder
-
-  #WriteDataFrame*[Backend] = concept frame
-  #  ## A writable DataFrame, having a frame_data setter accepting a Backend.
-  #  frame.frame_data = Backend
-  #  frame.frame_order = DataOrder
-  #  
-  #DataFrame*[Backend] = concept frame
-  #  ## A readable or writable DataFrame
-  #  frame is ReadDataFrame[Backend]|WriteDataFrame[Backend]
-
-  #ReadOnlyDataFrame*[Backend] = concept frame
-  #  ## A readable data frame which is not writable.
-  #  frame is ReadDataFrame[Backend]
-  #  not (frame is WriteDataFrame[Backend])
-
-  #WriteOnlyDataFrame*[Backend] = concept frame
-  #  ## A writable data frame which is not readable.
-  #  frame is WriteDataFrame[Backend]
-  #  not (frame is ReadDataFrame[Backend])
 
 
 proc initFrame*[U; T](result: var U; order: DataOrder; dat: seq[T], sh: varargs[int]) {.inline.} =
@@ -187,6 +164,9 @@ proc channel_count*[U: DataFrame](frame: U): auto =
 
 proc channel*[U: DataFrame](frame: U; i: int): auto {.inline.} =
   slice_channel frame.dat, frame.ordr, i
+
+# TODO: To implement this, we need to finally add lookup of backend by type.
+#proc write_channel*[U: DataFrame](frame: var U; i: int, 
 
 
 when isMainModule:
