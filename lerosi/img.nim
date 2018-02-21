@@ -164,11 +164,24 @@ type
     img is BaseImage[Frame]
     not (img is StructuredImage[Frame])
 
+proc data_order*[Img: DynamicImageObject](im: Img): DataOrder {.inline.} =
+  im.data_frame.frame_order
+
 template RawImageType*(name, access: string; T: untyped): untyped =
   RawImageObject[FrameType(name, access, T)]
 
 template DynamicImageType*(name, access: string; T: untyped): untyped =
   DynamicImageObject[FrameType(name, access, T)]
+
+template initDynamicImageLike*[Img: DynamicImageObject](
+    name, access: string; T: untyped; im: Img): untyped =
+
+  block:
+    var r: DynamicImageType(name, access, T)
+    let shap = im.data_frame.frame_data.backend_data_shape
+    r.data_frame.frame_order = im.data_frame.frame_order
+    initFrame r.data_frame, im.data_order, shap
+    r
 
 import ./img/layout
 import ./img/sampling

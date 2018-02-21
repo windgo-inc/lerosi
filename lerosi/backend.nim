@@ -37,10 +37,11 @@ var be_datatypes {.compileTime.} = newSeq[string]()
 var be_slicetypes {.compileTime.} = newSeq[string]()
 var be_shapetypes {.compileTime.} = newSeq[string]()
 
-proc lookupBackendIndexImpl(i: int): int {.compileTime.} =
+proc lookupBackendIndexImpl(i: int, copyGenParam: bool): int {.compileTime.} =
+  # Ignore copyGenParam in this case
   result = if i < 0 or i >= backendNames.len: -1 else: i
 
-proc lookupBackendIndexImpl(node: NimNode): int {.compileTime.} =
+proc lookupBackendIndexImpl(node: NimNode, copyGenParam: bool, genParam: var NimNode): int {.compileTime.} =
   result = -1 # By default.
   case node.kind:
     of nnkLiterals:
@@ -64,28 +65,59 @@ proc lookupBackendIndexImpl(node: NimNode): int {.compileTime.} =
           if result < -1 or result >= backendNames.len:
             result = -1
     of nnkIdent:
+      echo "identifier node ", toStrLit(node).strVal
       # We are looking for a backend with a type.
-      let str = $node
+      let str = $(node.getType)
       if str in backendByTypenameIndex:
         result = backendByTypenameIndex[str]
     else:
       # We are looking for a backend with a complex type expression.
       # TODO: Improve implementation, this is pretty ad-hoc.
       try:
-        let str = $(node[0])
+        let
+          typedNode = node.getTypeInst()
+          innerNode = typedNode[1]
+          typeKind = innerNode.typeKind
+
+        echo "searching node ", toStrLit(innerNode).strVal
+        echo "    typed it is ", toStrLit(innerNode).strVal
+        echo "    the type kind ", $typeKind
+
+        let str = $(innerNode[0])
         if str in backendByTypenameIndex:
           result = backendByTypenameIndex[str]
+          if 0 <= result:
+            # We found a matching typename. Get the generic parameters.
+            echo "found matching type ", str
+            #genParam = nnkGenericParams.newTree
+            for i in 1..innerNode.len-1:
+              echo "adding parameter ", innerNode[i]
+              genParam.add(innerNode[i].getType)
         if result < 0:
-          result = lookupBackendIndexImpl(node[0])
+          # If we still haven't found anything
+          for i in 1..innerNode.len-1:
+            result = lookupBackendIndexImpl(innerNode[i], copyGenParam, genParam)
+            if 0 <= result: break
       except:
         discard
 
-proc lookupBackendIndexImpl(name: string): int {.compileTime.} =
-  lookupBackendIndexImpl(newStrLitNode(name))
+proc lookupBackendIndexImpl(name: string, copyGenParam: bool, genParam: var NimNode): int {.compileTime.} =
+  lookupBackendIndexImpl(
+    if copyGenParam: parseExpr(name) else: newStrLitNode(name),
+    copyGenParam, genParam)
 
 proc lookupBackendIndex(id: string|int|NimNode): int {.compileTime.} =
   # Use the implementation to try to find a match.
-  result = lookupBackendIndexImpl(id)
+  var dummy: NimNode = newEmptyNode()
+  result = lookupBackendIndexImpl(id, false, dummy)
+  if result == -1 and 0 <= fallbackBackendId:
+    # Use the fallback.
+    result = fallbackBackendId
+
+
+proc lookupBackendIndex(id: string|int|NimNode, genParam: var NimNode): int {.compileTime.} =
+  # Use the implementation to try to find a match.
+  result = lookupBackendIndexImpl(id, true, genParam)
   if result == -1 and 0 <= fallbackBackendId:
     # Use the fallback.
     result = fallbackBackendId
@@ -144,6 +176,16 @@ proc BackendDesc_impl(id: int|string|NimNode): string {.compileTime.} =
   else:
     quit "LERoSI: requested type of unknown " & backend_key_human(id) & "."
 
+proc SliceDescParam_impl(id: NimNode): NimNode {.compileTime.} =
+  var param = nnkGenericParams.newTree
+  let i = lookupBackendIndex(id, param)
+  if 0 <= i:
+    result = nnkBracketExpr.newTree(ident(be_slicetypes[i]))
+    param.copyChildrenTo(result)
+    echo "Getting " & toStrLit(result).strVal & " as parameterized slice type."
+  else:
+    quit "LERoSI: requested slice type of unknown " & backend_key_human(id) & "."
+
 proc SliceDesc_impl(id: int|string|NimNode): string {.compileTime.} =
   let i = lookupBackendIndex(id)
   if 0 <= i:
@@ -179,9 +221,12 @@ proc BackendTypeNode*(key: int|string|NimNode; T: NimNode): NimNode {.compileTim
 
   result = typeexpr
 
-macro BackendType*(key, T: untyped): untyped =
+macro BackendType*(key, T: typed): untyped =
   ## Backend type selector
   result = BackendTypeNode(key, T)
+
+proc SliceTypeNode*(node: NimNode): NimNode {.compileTime.} =
+  result = SliceDescParam_impl node
 
 proc SliceTypeNode*(key: int|string|NimNode; T: NimNode): NimNode {.compileTime.} =
   let
@@ -191,21 +236,25 @@ proc SliceTypeNode*(key: int|string|NimNode; T: NimNode): NimNode {.compileTime.
 
   result = typeexpr
 
-macro SliceType*(key, T: untyped): untyped =
+macro SliceType*(key: typed): untyped =
+  ## Backend slice type selector
+  result = SliceTypeNode(key)
+
+macro SliceType*(key, T: typed): untyped =
   ## Backend slice type selector
   result = SliceTypeNode(key, T)
 
-proc ShapeTypeNode*(key: int|string|NimNode; T: NimNode): NimNode {.compileTime.} =
+proc ShapeTypeNode*(key: int|string|NimNode): NimNode {.compileTime.} =
   let
     typename = ShapeDesc_impl key
     typeident = ident(typename)
-    typeexpr = nnkBracketExpr.newTree(typeident, T.copy)
+    typeexpr = nnkBracketExpr.newTree(typeident)
 
   result = typeexpr
 
-macro ShapeType*(key, T: untyped): untyped =
+macro ShapeType*(key: typed): untyped =
   ## Backend slice type selector
-  result = ShapeTypeNode(key, T)
+  result = ShapeTypeNode(key)
 
 macro declareBackend(name, dataname, slicename, shapename: untyped): untyped =
   let

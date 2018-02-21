@@ -73,7 +73,7 @@ proc `frame_data=`*[U: RWFrameObject|WOFrameObject](frame: var U,
   ## Frame data setter for writable data frames.
   frame.dat = data
 
-proc `frame_order=`*[U: RWFrameObject|WOFrameObject](
+proc `frame_order=`*[U: RWFrameObject|WOFrameObject|ROFrameObject](
     frame: var U; order: DataOrder) =
   ## Set the ordering of a writable frame object. Note that this will not
   ## rotate the storage order for any data written; it is the responsibility
@@ -104,6 +104,22 @@ type
   WriteOnlyDataFrame*[B] = WOFrameObject[B]
   DataFrame*[B] = ROFrameObject[B]|WOFrameObject[B]|RWFrameObject[B]
 
+
+proc initFrame*[U; S: not int](result: var U; order: DataOrder; sh: S) {.inline.} =
+  backend_data_noinit(result.dat, sh)
+  result.ordr = order
+
+proc initFrame*[U; S: not int; T](result: var U; order: DataOrder; dat: seq[T], sh: S) {.inline.} =
+  backend_data_raw(result.dat, dat, sh)
+  result.ordr = order
+
+proc initFrame*[U; S: not int](result: var U; order: DataOrder; slices: varargs[S]) {.inline.} =
+  backend_slices_source(result.dat, order, slices)
+  result.ordr = order
+
+proc initFrame*[U](result: var U; order: DataOrder; sh: varargs[int]) {.inline.} =
+  backend_data_noinit(result.dat, sh)
+  result.ordr = order
 
 proc initFrame*[U; T](result: var U; order: DataOrder; dat: seq[T], sh: varargs[int]) {.inline.} =
   backend_data_raw(result.dat, dat, sh)
@@ -142,7 +158,7 @@ proc ordered*[U: DataFrame](frame: U; order: DataOrder): U {.inline, noSideEffec
     result.ordr = order
 
 
-proc shape*[U: DataFrame](frame: U): auto =
+proc shape*[U: DataFrame](frame: U): auto {.inline.} = #ShapeType(U) =
   case frame.ordr:
     of DataInterleaved:
       result = backend_data_shape(frame.dat)
@@ -152,21 +168,22 @@ proc shape*[U: DataFrame](frame: U): auto =
       result = result[1..result.len - 1]
 
 
-proc channel_count*[U: DataFrame](frame: U): auto =
+proc channel_count*[U: DataFrame](frame: U): int {.inline.} =
   case frame.ordr:
     of DataInterleaved:
       let v = backend_data_shape(frame.dat)
-      result = v[v.len - 1]
+      result = v[v.len - 1].int
     of DataPlanar:
       let v = backend_data_shape(frame.dat)
-      result = v[0]
+      result = v[0].int
 
 
 proc channel*[U: DataFrame](frame: U; i: int): auto {.inline.} =
   slice_channel frame.dat, frame.ordr, i
 
-# TODO: To implement this, we need to finally add lookup of backend by type.
-#proc write_channel*[U: DataFrame](frame: var U; i: int, 
+proc channel*[T; U: DataFrame](frame: var U; i: int; slc: T): var U {.inline, discardable.} =
+  discard mslice_channel(frame.dat, frame.ordr, i, slc)
+  frame
 
 
 when isMainModule:

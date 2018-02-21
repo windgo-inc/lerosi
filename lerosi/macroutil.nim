@@ -153,7 +153,7 @@ proc preferCompileTimeGen(targetProc: NimNode):
 
     targetIdent = ident(originalName)
 
-  echo originalName, if isExported: " is exported" else: " is private"
+  #echo originalName, if isExported: " is exported" else: " is private"
 
   inc countEagerCompileProcs
   let r1 = countEagerCompileProcs

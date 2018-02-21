@@ -245,8 +245,9 @@ proc makeChannels(): NimNode {.compileTime.} =
         )))))
 
   let addendum = quote do:
-    proc id*(ch: ChannelId):
-      ChannelId {.inline, noSideEffect, raises: [].} = ch
+    #proc id*(ch: ChannelId):
+    #  ChannelId {.inline, noSideEffect, raises: [].} = ch
+    discard
 
   var dollarproc = newProc(nnkPostfix.newTree(ident"*", dollarProcVar), [
     ident"string",
@@ -581,9 +582,6 @@ macro declareChannelSpaceMetadata*: untyped =
   makeChannelSpaces().copyChildrenTo(result)
   makeChannelSpaceRefs().copyChildrenTo(result)
 
-  let finalmsg = quote do:
-    static:
-      echo "Supporting ", channelspaceCounter, " channelspaces of which ",
-        properChannelspaceCounter, " are full channelspaces."
-  finalmsg.copyChildrenTo(result)
+  echo "Supporting ", channelspaceCounter, " channelspaces of which ",
+    properChannelspaceCounter, " are full channelspaces."
 

@@ -358,6 +358,15 @@ suite "LERoSI Unit Tests":
   test "CT^2-DB ChannelId to/from string run-time naming consistency":
     for id in ChannelId: runTimeNameCheckCh(id)
 
+  proc genericallyGetTheType[T](x: T): string =
+    result = SliceType(T).name
+
+  test "CT^2-DB reverse type lookup":
+    var x: AmBackendCpu[int]
+
+    check compiles((SliceType(AmBackendCpu[int]).name))
+    check compiles((genericallyGetTheType(x)))
+
   var runtimeCallValue: int = 0
   proc amIEagerlyDoingIt(x: int): bool {.eagerCompile.} =
     when nimvm:
@@ -567,7 +576,7 @@ suite "LERoSI Unit Tests":
     for i in 0..2:
       check myInterleavedFrame.channel(i).slice_data == myFrame.channel(i).slice_data
 
-  template checkFrame(myFrame: untyped): untyped =
+  template checkFrameSimple(myFrame: untyped): untyped =
     check myFrame.interleaved.shape == expect_shape[0..1]
     check myFrame.planar.shape == expect_shape[0..1]
 
@@ -577,6 +586,19 @@ suite "LERoSI Unit Tests":
         data2 = myFrame.planar.channel(i).slice_data
       check data1 == data2
 
+  template checkFrameAgainst(myFrame, otherFrame: untyped): untyped =
+    check myFrame.interleaved.shape == otherFrame.shape
+    check myFrame.planar.shape == otherFrame.shape
+
+    if myFrame.planar.shape == otherFrame.shape:
+      for i in 0..<min(myFrame.channel_count, otherFrame.channel_count):
+        let
+          data1 = myFrame.interleaved.channel(i).slice_data
+          data2 = myFrame.planar.channel(i).slice_data
+          data3 = otherFrame.channel(i).slice_data
+        check data1 == data2
+        check data1 == data3
+
   test "dataframe image from picio":
     var myFrame: FrameType("*", "rw", byte)
     var myImgData: seq[byte]
@@ -585,26 +607,73 @@ suite "LERoSI Unit Tests":
     picio_load_core3_file_by_type("test/sample.png", h, w, ch, myImgData)
     initFrame myFrame, DataInterleaved, myImgData, [h, w, ch]
 
-    checkFrame myFrame
+    checkFrameSimple myFrame
 
   test "picture readPictureFile dataframe check":
     #var myImage: DynamicImageType("*", "rw", byte)
     let myImage = readPictureFile(byte, "*", "test/sample.png")
 
-    checkFrame myImage.data_frame
+    checkFrameSimple myImage.data_frame
 
   test "picture writePicture/readPictureData dataframe check":
     #var myImage: DynamicImageType("*", "rw", byte)
 
     let myImage = readPictureFile(byte, "*", "test/sample.png")
-    let coredata = myImage.writePicture(SO(format: JPEG))
+    let coredata = myImage.writePicture(SO(format: PNG))
     
     #var myMirror: DynamicImageType("*", "rw", byte)
     let myMirror = readPictureData(byte, "*", coredata)
     
-    checkFrame myImage.data_frame
-    checkFrame myMirror.data_frame
+    checkFrameSimple myMirror.data_frame
+    checkFrameAgainst myImage.data_frame, myMirror.data_frame
 
+  test "dataframe channel mutator red/blue swap":
+    var myImage = readPictureFile(byte, "*", "test/sample.bmp")
+    let refImage = readPictureFile(byte, "*", "test/redbluereverse.bmp")
+    var targetImage = initDynamicImageLike("*", "rw", byte, refImage)
+
+    myImage.data_frame.initFrame(
+      DataInterleaved,
+      myImage.data_frame.channel(0),
+      myImage.data_frame.channel(1),
+      myImage.data_frame.channel(2)
+    )
+
+    echo "Channels in myImage ", myImage.data_frame.channel_count
+    echo "Channels in refImage ", refImage.data_frame.channel_count
+
+    checkFrameSimple myImage.data_frame
+
+    let red = myImage.data_frame.channel(0)
+    let green = myImage.data_frame.channel(1)
+    let blue = myImage.data_frame.channel(2)
+
+    targetImage.data_frame.channel(0, blue)
+    targetImage.data_frame.channel(1, green)
+    targetImage.data_frame.channel(2, red)
+
+    check targetImage.writePicture("test/redbluereverse_test.bmp", SO(format: BMP))
+
+    checkFrameAgainst targetImage.data_frame, refImage.data_frame
+
+  test "dataframe channel mutator red/blue swap in-place":
+    var myImage = readPictureFile(byte, "*", "test/sample.bmp")
+    let refImage = readPictureFile(byte, "*", "test/redbluereverse.bmp")
+
+    echo "Channels in myImage ", myImage.data_frame.channel_count
+    echo "Channels in refImage ", refImage.data_frame.channel_count
+
+    checkFrameSimple myImage.data_frame
+
+    let red = myImage.data_frame.channel(0).slice_copy
+    let blue = myImage.data_frame.channel(2)
+
+    myImage.data_frame.channel(0, blue)
+    myImage.data_frame.channel(2, red)
+
+    check myImage.writePicture("test/redbluereverse_inplace_test.bmp", SO(format: BMP))
+
+    checkFrameAgainst myImage.data_frame, refImage.data_frame
 
 
   #test "img initRawImageObject":

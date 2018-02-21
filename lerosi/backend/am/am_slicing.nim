@@ -26,15 +26,21 @@ import ../am
 import ../../spaceconf
 
 type
-  AmSlice*[Storage] = object
-    d: Storage
+  #AmSlice*[Storage] = object
+  #  d: Storage
 
-  AmSliceCpu*[T]  = AmSlice[Tensor[T]]
-  AmSliceCuda*[T] = AmSlice[CudaTensor[T]]
+  AmSliceCpu*[T] = object
+    d: Tensor[T]
+
+  #AmSliceCuda*[T] = AmSlice[CudaTensor[T]]
   #AmSliceCL*[T]   = AmSlice[ClTensor[T]]
 
-proc `==`*[Storage](a, b: AmSlice[Storage]): bool {.inline.} =
+proc `==`*[T](a, b: AmSliceCpu[T]): bool {.inline.} =
   a.d == b.d
+
+proc slice_copy*[T](b: AmSliceCpu[T]): AmSliceCpu[T] {.inline.} =
+  result.d = zeros_like(b.d).asContiguous
+  deepCopy result.d.data, b.d.asContiguous.data
 
 template slicer_interleaved_impl(n, d: typed): untyped =
   block:
@@ -43,7 +49,7 @@ template slicer_interleaved_impl(n, d: typed): untyped =
 
     d.atAxisIndex(n-1, i).squeeze(n-1)
 
-template mslicer_interleaved_impl(n, d, x: typed): untyped =
+template mslicer_interleaved_impl(n, d, i, x: typed): untyped =
   case n
   of 2: d[_, i] = x.unsqueeze(1)
   of 3: d[_, _, i] = x.unsqueeze(2)
@@ -54,7 +60,7 @@ template mslicer_interleaved_impl(n, d, x: typed): untyped =
   else: discard
 
 proc slice_channel_planar*[B](b: B, i: int):
-    AmSlice[B.Storage] {.inline.} =
+    AmSliceCpu[B.T] {.inline.} =
 
   when compileOption("boundChecks"):
     assert(0 <= i and i < 7)
@@ -63,7 +69,7 @@ proc slice_channel_planar*[B](b: B, i: int):
   result.d = d[i, _].squeeze(0)
 
 proc slice_channel_interleaved*[B](b: B, i: int):
-    AmSlice[B.Storage] {.inline.} =
+    AmSliceCpu[B.T] {.inline.} =
 
   when compileOption("boundChecks"):
     assert(0 <= i and i < 7)
@@ -72,49 +78,53 @@ proc slice_channel_interleaved*[B](b: B, i: int):
   result.d = slicer_interleaved_impl(d.shape.len, d)
 
 proc mslice_channel_planar*[B](b: var B,
-    i: int, x: AmSlice[B.Storage]):
+    i: int, x: AmSliceCpu[B.T]):
     var B {.discardable, inline.} =
 
   when compileOption("boundChecks"):
     assert(0 <= i and i < 7)
 
-  let d = b.backend_data
-  d[i, _] = x.d.unsqueeze(0)
+  var d = b.backend_data
+  let slc = x.slice_data.asContiguous
+  d[i, _] = slc.unsqueeze(0)
   result = b
 
 proc mslice_channel_interleaved*[B](b: var B,
-    i: int, x: AmSlice[B.Storage]):
+    i: int, x: AmSliceCpu[B.T]):
     var B {.discardable, inline.} =
 
   when compileOption("boundChecks"):
     assert(0 <= i and i < 7)
 
-  let d = b.backend_data
-  mslicer_interleaved_impl(d.shape.len, d, x)
+  var d = b.backend_data
+  mslicer_interleaved_impl(d.shape.len, d, i, x.slice_data.asContiguous)
   result = b
   
 template slice_channel*[B](b: B,
-    order: DataOrder, i: int): AmSlice[B.Storage] =
+    order: DataOrder, i: int): AmSliceCpu[B.T] =
 
   (case order
   of DataPlanar: slice_channel_planar(b, i)
   of DataInterleaved: slice_channel_interleaved(b, i))
 
 template mslice_channel*[B](b: var B,
-    order: DataOrder, i: int, x: AmSlice[B.Storage]): untyped =
+    order: DataOrder, i: int, x: AmSliceCpu[B.T]): untyped =
 
-  (case order
-  of DataPlanar: mslice_channel_planar(b, i, x)
-  of DataInterleaved: mslice_channel_interleaved(b, i, x))
+  block:
+    var r: B
+    case order
+    of DataPlanar: r = mslice_channel_planar(b, i, x)
+    of DataInterleaved: r = mslice_channel_interleaved(b, i, x)
+    r
 
-proc slice_shape*[Storage](x: AmSlice[Storage]): AmShape {.inline.} =
+proc slice_shape*[T](x: AmSliceCpu[T]): AmShape {.inline.} =
   x.d.shape
 
-proc slice_reshaped*[Storage](x: AmSlice[Storage], s: AmShape):
-    AmSlice[Storage] {.inline.} =
+proc slice_reshaped*[T](x: AmSliceCpu[T], s: AmShape):
+    AmSliceCpu[T] {.inline.} =
 
   result.d = x.d.reshape(s)
 
-proc slice_data*[Storage](x: AmSlice[Storage]): Storage {.inline.} =
+proc slice_data*[T](x: AmSliceCpu[T]): Tensor[T] {.inline.} =
   result = x.d
 

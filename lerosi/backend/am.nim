@@ -22,14 +22,16 @@
 # SOFTWARE.
 
 import system, macros, arraymancer, future
-
+import ../spaceconf
 
 type
-  AmBackend*[Storage] = object
-    is_init: bool
-    d: Storage
+  #AmBackend*[T] = object
+  #  is_init: bool
+  #  d: Storage
 
-  AmBackendCpu*[T] = AmBackend[Tensor[T]]
+  AmBackendCpu*[T] = object
+    is_init: bool
+    d: Tensor[T]
   # Waiting for opencl, cuda, cpu conversion procs.
   #AmBackendCuda*[T] = AmBackend[CudaTensor[T]]
   #AmBackendCL*[T] = AmBackend[ClTensor[T]]
@@ -37,11 +39,11 @@ type
   AmShape* = MetadataArray
 
 
-proc `==`*[Storage](a, b: AmBackend[Storage]): bool {.inline.} =
+proc `==`*[T](a, b: AmBackendCpu[T]): bool {.inline.} =
   a.is_init and b.is_init and (a.d == b.d)
 
 
-proc backend_initialized*[Storage](b: AmBackend[Storage]):
+proc backend_initialized*[T](b: AmBackendCpu[T]):
     bool {.inline, noSideEffect, raises: [].} =
   
   b.is_init
@@ -58,8 +60,18 @@ template initraw(fn, b, d, s: untyped): untyped =
   b.is_init = true
   b
 
-proc backend_data*[Storage](b: var AmBackend[Storage], d: Storage):
-    var AmBackend[Storage] {.discardable, inline, noSideEffect, raises: [].} =
+proc backend_data_noinit*[T](b: var AmBackendCpu[T], s: AmShape):
+    var AmBackendCpu[T] {.discardable, inline.} =
+  let d = newTensorUninit[T](s)
+  initraw(asis, b, d, "")
+
+proc backend_data_noinit*[T](b: var AmBackendCpu[T], s: varargs[int]):
+    var AmBackendCpu[T] {.discardable, inline.} =
+  let d = newTensorUninit[T](s)
+  initraw(asis, b, d, "")
+
+proc backend_data*[T](b: var AmBackendCpu[T], d: Tensor[T]):
+    var AmBackendCpu[T] {.discardable, inline, noSideEffect, raises: [].} =
   initraw(asis, b, d, "")
 
 proc backend_data_raw*[T](b: var AmBackendCpu[T], d: seq[T], s: AmShape):
@@ -83,38 +95,37 @@ template backend_data_check(b: untyped): untyped =
       raise newException(ValueError,
         "LERoSI/backend/am - backend data access; data are uninitialized.")
 
-proc backend_data*[Storage](b: AmBackend[Storage]): Storage {.inline.} =
+proc backend_data*[T](b: AmBackendCpu[T]): Tensor[T] {.inline.} =
   backend_data_check(b)
   result = b.d
 
-proc backend_data*[Storage](b: var AmBackend[Storage]): var Storage {.inline.} =
+proc backend_data*[T](b: var AmBackendCpu[T]): var Tensor[T] {.inline.} =
   backend_data_check(b)
   result = b.d
 
-proc backend_data_raw*[Storage](b: AmBackend[Storage]): seq[Storage.T] {.inline.} =
+proc backend_data_raw*[T](b: AmBackendCpu[T]): seq[T] {.inline.} =
   backend_data_check(b)
   result = b.d.data
 
-proc backend_data_raw*[Storage](b: var AmBackend[Storage]):
-    var seq[Storage.T] {.inline.} =
+proc backend_data_raw*[T](b: var AmBackendCpu[T]): var seq[T] {.inline.} =
 
   backend_data_check(b)
   result = b.d.data
 
-proc backend_data_shape*[Storage](b: var AmBackend[Storage], s: AmShape):
-    var AmBackend[Storage] {.discardable, inline.} =
+proc backend_data_shape*[T](b: var AmBackendCpu[T], s: AmShape):
+    var AmBackendCpu[T] {.discardable, inline.} =
 
   backend_data_check(b)
   b.d = b.d.reshape(s)
 
-proc backend_data_shape*[Storage](b: AmBackend[Storage]):
+proc backend_data_shape*[T](b: AmBackendCpu[T]):
     AmShape {.inline.} =
 
   backend_data_check(b)
   result = b.d.shape
 
-proc backend_cmp*[AS, BS](a: AmBackend[AS], b: AmBackend[BS]): bool {.inline.} =
-  when (AS is BS) and (BS is AS):
+proc backend_cmp*[A, B](a: AmBackendCpu[A], b: AmBackendCpu[B]): bool {.inline.} =
+  when (A is B) and (B is A):
     result = (a.d.shape == b.d.shape) and (a.d == b.d)
   else:
     result = false
@@ -152,19 +163,9 @@ proc backend_local_source[T; U](
     dest.d = src.d.asType(T)
   dest.is_init = true
 
-#template backend_local_source(dest, src, fmap: untyped): untyped =
-#  backend_data_check(src)
-#  when dest.d is CudaTensor:
-#    # As of 0.3.0, CudaTensor does not support inlined mapping.
-#    dest.d = src.d.map(fmap)
-#  else:
-#    dest.d = map_inline(src.d):
-#      fmap(x)
-#  dest.is_init = true
-
 # map_inline requires things from arraymancer, and for some reason wrapping
 # it in an inline procedure does not shield the user of lerosi/backend/am
-# from requiring arraymancer. Compiler bug?
+# from requiring arraymancer.
 proc backend_local_source_impl[T; U](
     dest: var AmBackendCpu[T];
     src: AmBackendCpu[U];
@@ -172,11 +173,11 @@ proc backend_local_source_impl[T; U](
 
   backend_data_check(src)
   dest.d = newTensorUninit[T](src.backend_data_shape)
-  for i in 0..<src.d.shape.product:
-    dest.d.data[i] = fmap(src.d.data[i])
+  #for i in 0..<src.d.shape.product:
+  #  dest.d.data[i] = fmap(src.d.data[i])
 
-  #apply2_inline(dest.d, src.d):
-  #  fmap(y)
+  apply2_inline(dest.d, src.d):
+    fmap(y)
   dest.is_init = true
 
 proc backend_local_source*[T; U](
@@ -186,6 +187,33 @@ proc backend_local_source*[T; U](
 
   proc fmap_wrapper(x: U): T = fmap(x)
   backend_local_source_impl(dest, src, fmap_wrapper)
+
+# TODO: Is there a more efficient way (in arraymancer) than to concatinate?
+proc backend_slices_source*[T; U](
+    dest: var AmBackendCpu[T];
+    order: DataOrder;
+    slices: varargs[AmSliceCpu[U]]) =
+
+  when compileOption("boundChecks"):
+    assert 1 <= slices.len,
+      "Bound check failed, must specify at least one slice as a source."
+
+  let sh = slices[0].slice_data.shape
+
+  when compileOption("boundChecks"):
+    for i in 1..<slices.len:
+      assert sh == slices[0].slice_data.shape
+
+  var tacc = slices[0].slice_data.squeeze.unsqueeze(0)
+  for i in 1..<slices.len:
+    let nextslice = slices[i].slice_data.squeeze.unsqueeze(0)
+    tacc = concat(tacc, nextslice, axis = 0)
+
+  if order == DataPlanar:
+    discard dest.backend_data(tacc.asContiguous)
+  else:
+    # asContiguous not needed, invoked by backend_rotate
+    discard dest.backend_data(tacc).backend_rotate(DataInterleaved)
 
 macro implement_backend_source(kind, notkind, conv: untyped): untyped =
   result = quote do:
