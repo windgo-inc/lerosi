@@ -55,7 +55,7 @@ proc defChannelMap*(cs: ChannelSpace; s: string): ChannelMap {.inline.} =
     result.add ch
 
 
-proc possibleChannelSpaces(mapping: ChannelMap; num_options: var int): set[ChannelSpace] {.inline.} =
+proc possibleChannelSpacesImpl(mapping: ChannelMap; num_options: var int): set[ChannelSpace] {.inline.} =
   var
     first = true
     revised: set[ChannelSpace]
@@ -77,7 +77,7 @@ proc possibleChannelSpaces(mapping: ChannelMap; num_options: var int): set[Chann
 
 proc possibleChannelSpaces*(mapping: ChannelMap): set[ChannelSpace] {.inline.} =
   var x: int
-  possibleChannelSpaces(mapping, x)
+  possibleChannelSpacesImpl(mapping, x)
 
 
 proc defChannelLayout*(cs: ChannelSpace, s: string): ChannelLayout {.eagerCompile, inline.} =
@@ -92,7 +92,7 @@ proc defChannelLayout*(s: string): ChannelLayout {.inline, eagerCompile.} =
 
   let
     mapping = defChannelMap(s)
-    possibilities = possibleChannelSpaces(mapping, num_options)
+    possibilities = possibleChannelSpacesImpl(mapping, num_options)
 
   for cs in possibilities:
     space = cs
@@ -104,32 +104,6 @@ proc defChannelLayout*(s: string): ChannelLayout {.inline, eagerCompile.} =
 
   result = defChannelLayout(space, mapping)
 
-proc mapping*[ImgObj: DynamicImageObject](img: ImgObj):
-    ChannelMap {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping from the channel layout.
-  img.lay.mapping
-
-
-proc channelspace*[ImgObj: DynamicImageObject](img: ImgObj):
-    ChannelSpace {.inline, noSideEffect, raises: [].} =
-  ## Get the channel mapping from the channel layout.
-  img.lay.colorspace
-
-
-proc layout*[ImgObj: DynamicImageObject](img: ImgObj):
-    ChannelLayout {.inline, noSideEffect, raises: [].} =
-  ## Get the channel layout.
-  img.lay
-
-
-proc layout*[ImgObj: DynamicImageObject; M](
-    img: var ImgObj, cs: ChannelSpace,
-    m: M): var ImgObj {.discardable, inline.} =
-  ## Set the channel layout.
-  img.lay = defChannelLayout(cs, m)
-  result = img
-
-
 proc `channelspace=`*[ImgObj: DynamicImageObject](
     img: var ImgObj, cs: ChannelSpace)
     {.inline, noSideEffect, raises: [].} =
@@ -140,5 +114,5 @@ proc `channelspace=`*[ImgObj: DynamicImageObject](
 proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
     {.inline, noSideEffect, raises: [].} =
   ## Set the channel mapping
-  img.lay.mapping = m
+  img.layout.mapping = m
 

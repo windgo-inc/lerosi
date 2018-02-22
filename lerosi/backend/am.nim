@@ -189,10 +189,10 @@ proc backend_local_source*[T; U](
   backend_local_source_impl(dest, src, fmap_wrapper)
 
 # TODO: Is there a more efficient way (in arraymancer) than to concatinate?
-proc backend_slices_source*[T; U](
+proc backend_slices_source_impl[T; U](
     dest: var AmBackendCpu[T];
     order: DataOrder;
-    slices: varargs[AmSliceCpu[U]]) =
+    slices: openarray[AmSliceCpu[U]]) =
 
   when compileOption("boundChecks"):
     assert 1 <= slices.len,
@@ -214,6 +214,23 @@ proc backend_slices_source*[T; U](
   else:
     # asContiguous not needed, invoked by backend_rotate
     discard dest.backend_data(tacc).backend_rotate(DataInterleaved)
+
+
+proc backend_slices_source*[T; U](
+    dest: var AmBackendCpu[T];
+    order: DataOrder;
+    slices: varargs[AmSliceCpu[U]]) {.inline.} =
+
+  backend_slices_source_impl(dest, order, slices)
+
+
+proc backend_slices_source*[T; U](
+    dest: var AmBackendCpu[T];
+    order: DataOrder;
+    slices: seq[AmSliceCpu[U]]) {.inline.} =
+
+  backend_slices_source_impl(dest, order, slices)
+
 
 macro implement_backend_source(kind, notkind, conv: untyped): untyped =
   result = quote do:

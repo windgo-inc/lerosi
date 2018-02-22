@@ -61,45 +61,35 @@ proc defChannelLayout*(
   result.mapping = m
 
 
-
-#proc initRawImageObjectImpl*[Frame: DataFrame; T](result: var RawImageObject[Frame], data: seq[T], sh: varargs[int]) =
-#  ## Initialize a raw image object from a raw data.
-#  backend_data_raw(result.fr.frame_data(), data, sh)
-#
-#template initRawImageObject*[T](Frame: typedesc[DataFrame], data: seq[T], sh: varargs[int]): untyped =
-#  block:
-#    var fr: Frame
-#    initRawImageObjectImpl[Frame](fr, data, sh)
-#    fr
-#
-#proc initRawImageObject*[Frame: DataFrame](fr: Frame): RawImageObject[Frame] =
-#  ## Initialize a raw image object from an existing frame.
-#  result.fr = fr
-#
-#
-#proc toDynamic*[Frame: DataFrame](obj: RawImageObject[Frame],
-#    lay: ChannelLayout): DynamicImageObject[Frame] =
-#  ## Convert a RawImageObject in to a DynamicImageObject with associated
-#  ## layout information.
-#  result.fr = obj.fr
-#  result.lay = lay
-#
-#
-#template initDynamicImageObject*[T](name: string; lay: ChannelLayout; data: seq[T]; sh: varargs[int]): untyped =
-#  toDynamic(initRawImageObject(RWFrameObject[BackendType(name, T)], data, sh), lay)
-#
-#template initDynamicImageObject*[T](name: string; lay: string; data: seq[T]; sh: varargs[int]): untyped =
-#  toDynamic(initRawImageObject(RWFrameObject[BackendType(name, T)], data, sh), defChannelLayout(lay))
+proc layout*[ImgObj: DynamicImageObject](img: ImgObj):
+    ChannelLayout {.inline, noSideEffect, raises: [].} =
+  ## Get the channel layout.
+  img.lay
 
 
-proc initDynamicImageObject*[Img: DynamicImageObject](result: var Img, layout: ChannelLayout) =
-  result.lay = layout
+proc layout*[ImgObj: DynamicImageObject; M](
+    img: var ImgObj, cs: ChannelSpace,
+    m: M): var ImgObj {.discardable, inline.} =
+  ## Set the channel layout.
+  img.lay = defChannelLayout(cs, m)
+  result = img
 
+
+proc channelspace*[ImgObj: DynamicImageObject](img: ImgObj):
+    ChannelSpace {.inline, noSideEffect, raises: [].} =
+  ## Get the channelspace
+  result = img.lay.cspace
 
 proc channelspace*(layout: ChannelLayout):
     ChannelSpace {.eagerCompile, inline, noSideEffect, raises: [].} =
   ## Get the channelspace
   result = layout.cspace
+
+
+proc mapping*[ImgObj: DynamicImageObject](img: ImgObj):
+    ChannelMap {.inline, noSideEffect, raises: [].} =
+  ## Get the channelspace
+  result = img.lay.mapping
 
 
 proc mapping*(layout: ChannelLayout):
@@ -115,6 +105,22 @@ proc `mapping=`*(layout: var ChannelLayout, m: ChannelMap)
     assert(m.len <= len(layout.channelspace))
 
   layout.mapping = m
+
+
+import ./img/img_layout
+
+
+proc initDynamicImageObject*[Img: DynamicImageObject](
+    result: var Img, layout: ChannelLayout) =
+
+  result.lay = layout
+
+
+proc initDynamicImageObject*[Img: DynamicImageObject](result: var Img,
+    layout: ChannelLayout, fr: Img.Frame) =
+
+  result.lay = layout
+  result.fr = fr
   
 
 proc data_frame*
@@ -129,6 +135,27 @@ proc data_frame*
     img: var ImgObj): var ImgObj.Frame {.inline, noSideEffect, raises: [].} =
   ## Get the variable reference to the underlying data frame.
   img.fr
+
+
+proc swizzle_impl[ImgObj: DynamicImageObject](
+    img: ImgObj, idx: openarray[int]): ImgObj =
+
+  result.lay.mapping.setLen 0
+  for i in 0..<idx.len:
+    result.lay.mapping.add img.lay.mapping[idx[i]]
+
+  result.lay.cspace = img.lay.cspace
+  result.fr = img.fr.channels(idx)
+
+
+proc swizzle*[ImgObj: DynamicImageObject](
+    img: ImgObj, idx: varargs[int]): ImgObj =
+  swizzle_impl(img, idx)
+
+
+proc swizzle*[ImgObj: DynamicImageObject](
+    img: ImgObj, idx: seq[int]): ImgObj =
+  swizzle_impl(img, idx)
 
 
 type
@@ -183,10 +210,9 @@ template initDynamicImageLike*[Img: DynamicImageObject](
     initFrame r.data_frame, im.data_order, shap
     r
 
-import ./img/layout
-import ./img/sampling
-import ./img/convert
+import ./img/img_sampling
+import ./img/img_convert
 
-export layout, sampling, convert
+export img_layout, img_sampling, img_convert
 
 

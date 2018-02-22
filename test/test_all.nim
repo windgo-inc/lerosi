@@ -628,51 +628,49 @@ suite "LERoSI Unit Tests":
     checkFrameAgainst myImage.data_frame, myMirror.data_frame
 
   test "dataframe channel mutator red/blue swap":
-    var myImage = readPictureFile(byte, "*", "test/sample.bmp")
-    let refImage = readPictureFile(byte, "*", "test/redbluereverse.bmp")
-    var targetImage = initDynamicImageLike("*", "rw", byte, refImage)
+    let
+      myImage = readPictureFile(
+        byte, "*", "test/sample.bmp")
+        .swizzle(0, 1, 2)
+      refImage = readPictureFile(
+        byte, "*", "test/redbluereverse.bmp")
+        .swizzle(0, 1, 2)
 
-    myImage.data_frame.initFrame(
-      DataInterleaved,
-      myImage.data_frame.channel(0),
-      myImage.data_frame.channel(1),
-      myImage.data_frame.channel(2)
-    )
-
-    echo "Channels in myImage ", myImage.data_frame.channel_count
-    echo "Channels in refImage ", refImage.data_frame.channel_count
+    echo "    # channel map in test ", myImage.layout.mapping
+    echo "    # channel map in ref  ", refImage.layout.mapping
 
     checkFrameSimple myImage.data_frame
 
-    let red = myImage.data_frame.channel(0)
-    let green = myImage.data_frame.channel(1)
-    let blue = myImage.data_frame.channel(2)
+    let
+      targetImage = myImage.swizzle(2, 1, 0)
 
-    targetImage.data_frame.channel(0, blue)
-    targetImage.data_frame.channel(1, green)
-    targetImage.data_frame.channel(2, red)
+    check targetImage.channelspace == myImage.channelspace
+
+    echo "    # channel map is ", targetImage.layout.mapping
 
     check targetImage.writePicture("test/redbluereverse_test.bmp", SO(format: BMP))
-
     checkFrameAgainst targetImage.data_frame, refImage.data_frame
 
   test "dataframe channel mutator red/blue swap in-place":
-    var myImage = readPictureFile(byte, "*", "test/sample.bmp")
-    let refImage = readPictureFile(byte, "*", "test/redbluereverse.bmp")
+    var
+      myImage = readPictureFile(
+        byte, "*", "test/sample.bmp")
+        .swizzle(0, 1, 2)
+      refImage = readPictureFile(
+        byte, "*", "test/redbluereverse.bmp")
+        .swizzle(0, 1, 2)
 
-    echo "Channels in myImage ", myImage.data_frame.channel_count
-    echo "Channels in refImage ", refImage.data_frame.channel_count
+    echo "    # channel map in test ", myImage.layout.mapping
+    echo "    # channel map in ref  ", refImage.layout.mapping
 
     checkFrameSimple myImage.data_frame
 
-    let red = myImage.data_frame.channel(0).slice_copy
-    let blue = myImage.data_frame.channel(2)
-
-    myImage.data_frame.channel(0, blue)
-    myImage.data_frame.channel(2, red)
+    var fr = myImage.data_frame
+    let red = fr.channel(0).slice_copy
+    fr.channel(0, fr.channel(2))
+    fr.channel(2, red)
 
     check myImage.writePicture("test/redbluereverse_inplace_test.bmp", SO(format: BMP))
-
     checkFrameAgainst myImage.data_frame, refImage.data_frame
 
 

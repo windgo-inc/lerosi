@@ -113,7 +113,11 @@ proc initFrame*[U; S: not int; T](result: var U; order: DataOrder; dat: seq[T], 
   backend_data_raw(result.dat, dat, sh)
   result.ordr = order
 
-proc initFrame*[U; S: not int](result: var U; order: DataOrder; slices: varargs[S]) {.inline.} =
+proc initFrameSlices*[U; S: not int](result: var U; order: DataOrder; slices: varargs[S]) {.inline.} =
+  backend_slices_source(result.dat, order, slices)
+  result.ordr = order
+
+proc initFrameSlices*[U; S: not int](result: var U; order: DataOrder; slices: seq[S]) {.inline.} =
   backend_slices_source(result.dat, order, slices)
   result.ordr = order
 
@@ -158,7 +162,7 @@ proc ordered*[U: DataFrame](frame: U; order: DataOrder): U {.inline, noSideEffec
     result.ordr = order
 
 
-proc shape*[U: DataFrame](frame: U): auto {.inline.} = #ShapeType(U) =
+proc shape*[U: DataFrame](frame: U): auto {.inline, noSideEffect.} = #ShapeType(U) =
   case frame.ordr:
     of DataInterleaved:
       result = backend_data_shape(frame.dat)
@@ -168,7 +172,7 @@ proc shape*[U: DataFrame](frame: U): auto {.inline.} = #ShapeType(U) =
       result = result[1..result.len - 1]
 
 
-proc channel_count*[U: DataFrame](frame: U): int {.inline.} =
+proc channel_count*[U: DataFrame](frame: U): int {.inline, noSideEffect.} =
   case frame.ordr:
     of DataInterleaved:
       let v = backend_data_shape(frame.dat)
@@ -178,13 +182,19 @@ proc channel_count*[U: DataFrame](frame: U): int {.inline.} =
       result = v[0].int
 
 
-proc channel*[U: DataFrame](frame: U; i: int): auto {.inline.} =
+proc channel*[U: DataFrame](frame: U; i: int): auto {.inline, noSideEffect.} =
   slice_channel frame.dat, frame.ordr, i
 
 proc channel*[T; U: DataFrame](frame: var U; i: int; slc: T): var U {.inline, discardable.} =
   discard mslice_channel(frame.dat, frame.ordr, i, slc)
   frame
 
+proc channels*[U: DataFrame](frame: U; idx: varargs[int]): U {.inline.} =
+  var slices = @[slice_channel(frame.dat, frame.ordr, 0)]
+  slices.delete(0)
+  for i in 0..<idx.len:
+    slices.add slice_channel(frame.dat, frame.ordr, idx[i])
+  initFrameSlices result, frame.ordr, slices
 
 when isMainModule:
   import arraymancer # Needed for atypical access to internals for testing.
