@@ -26,6 +26,7 @@ import system
 
 import ./macroutil
 import ./fixedseq
+import ./spacemeta
 import ./spaceconf
 import ./backend
 
@@ -189,12 +190,51 @@ proc channel*[T; U: DataFrame](frame: var U; i: int; slc: T): var U {.inline, di
   discard mslice_channel(frame.dat, frame.ordr, i, slc)
   frame
 
-proc channels*[U: DataFrame](frame: U; idx: varargs[int]): U {.inline.} =
+proc channels_impl[U: DataFrame](frame: U; idx: openarray[int]|seq[int]|ChannelIndex): U {.inline.} =
+  # TODO: Move the slicing to initFrame slices so that the unneccessary
+  # sequence is eliminated.
+
+  # A hack to set the type of the sequence without reverse type lookup.
+  # Ugly!
   var slices = @[slice_channel(frame.dat, frame.ordr, 0)]
   slices.delete(0)
   for i in 0..<idx.len:
-    slices.add slice_channel(frame.dat, frame.ordr, idx[i])
+    if 0 <= idx[i]:
+      slices.add slice_channel(frame.dat, frame.ordr, idx[i])
+    else:
+      # Missing indices are given zeros
+      slices.add slice_channel_zero(frame.dat, frame.ordr)
+
   initFrameSlices result, frame.ordr, slices
+
+proc channelspan_impl[U: DataFrame](frame: U; slc: Slice[int]): U {.inline.} =
+  # TODO: Move the slicing to initFrame slices so that the unneccessary
+  # sequence is eliminated.
+
+  # A hack to set the type of the sequence without reverse type lookup.
+  # Ugly!
+  var slices = @[slice_channel(frame.dat, frame.ordr, slc.a)]
+  if slc.a < slc.b:
+    for i in countup(slc.a+1, slc.b):
+      slices.add slice_channel(frame.dat, frame.ordr, i)
+  elif slc.a > slc.b:
+    for i in countdown(slc.a-1, slc.b):
+      slices.add slice_channel(frame.dat, frame.ordr, i)
+
+  initFrameSlices result, frame.ordr, slices
+
+proc channels*[U: DataFrame](frame: U; idx: ChannelIndex): U {.inline.} =
+  channels_impl(frame, idx)
+
+proc channels*[U: DataFrame](frame: U; idx: varargs[int]): U {.inline.} =
+  channels_impl(frame, idx)
+
+proc channels*[U: DataFrame](frame: U; idx: seq[int]): U {.inline.} =
+  channels_impl(frame, idx)
+
+proc channelspan*[U: DataFrame](frame: U; slc: Slice[int]): U {.inline.} =
+  channelspan_impl(frame, slc)
+
 
 when isMainModule:
   import arraymancer # Needed for atypical access to internals for testing.

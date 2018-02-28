@@ -28,6 +28,7 @@ import system
 import ./macroutil
 import ./fixedseq
 import ./dataframe
+import ./spacemeta
 import ./spaceconf
 
 import ./backend
@@ -103,6 +104,7 @@ proc `mapping=`*(layout: var ChannelLayout, m: ChannelMap)
   ## Set the channel mapping
   when compileOption("boundChecks"):
     assert(m.len <= len(layout.channelspace))
+    for x in m: assert(x in layout.channelspace.channels)
 
   layout.mapping = m
 
@@ -138,7 +140,7 @@ proc data_frame*
 
 
 proc swizzle_impl[ImgObj: DynamicImageObject](
-    img: ImgObj, idx: openarray[int]): ImgObj =
+    img: ImgObj, idx: openarray[int]|ChannelIndex): ImgObj {.inline, noSideEffect.} =
 
   result.lay.mapping.setLen 0
   for i in 0..<idx.len:
@@ -148,14 +150,83 @@ proc swizzle_impl[ImgObj: DynamicImageObject](
   result.fr = img.fr.channels(idx)
 
 
+# Can't quite be based on swizzle_impl because it needs to properly
+# label the zero channels.
+proc reorder_impl[ImgObj: DynamicImageObject](
+    img: ImgObj, m: openarray[ChannelId]|ChannelMap): ImgObj {.inline, noSideEffect.} =
+
+  var idx: ChannelIndex
+  idx.setLen 0
+  result.lay.mapping.setLen 0
+  for i in 0..<m.len:
+    let j = find(img.lay.mapping, m[i])
+    result.lay.mapping.add m[i]
+    idx.add j
+
+  result.lay.cspace = img.lay.cspace
+  result.fr = img.fr.channels(idx)
+
+
+proc reinterpret_impl[ImgObj: DynamicImageObject](
+    img: ImgObj, lay: ChannelLayout): ImgObj {.inline, noSideEffect.} =
+
+  when compileOption("boundChecks"):
+    assert lay.mapping.len <= img.lay.mapping.len
+
+  if img.lay.mapping.len > lay.mapping.len:
+    result.fr = img.fr.channelspan(0..lay.mapping.len-1)
+  else:
+    result.fr = img.fr
+
+  result.lay = lay
+
+
 proc swizzle*[ImgObj: DynamicImageObject](
-    img: ImgObj, idx: varargs[int]): ImgObj =
+    img: ImgObj, idx: varargs[int]): ImgObj {.inline, noSideEffect.} =
+
   swizzle_impl(img, idx)
 
 
 proc swizzle*[ImgObj: DynamicImageObject](
-    img: ImgObj, idx: seq[int]): ImgObj =
+    img: ImgObj, idx: seq[int]): ImgObj {.inline, noSideEffect.} =
+
   swizzle_impl(img, idx)
+
+
+proc swizzle*[ImgObj: DynamicImageObject](
+    img: ImgObj, idx: ChannelIndex): ImgObj {.inline, noSideEffect.} =
+
+  swizzle_impl(img, idx)
+
+
+proc reorder*[ImgObj: DynamicImageObject](
+    img: ImgObj, m: varargs[ChannelId]): ImgObj {.inline, noSideEffect.} =
+
+  reorder_impl(img, m)
+
+
+proc reorder*[ImgObj: DynamicImageObject](
+    img: ImgObj, m: seq[ChannelId]): ImgObj {.inline, noSideEffect.} =
+
+  reorder_impl(img, m)
+
+
+proc reorder*[ImgObj: DynamicImageObject](
+    img: ImgObj, m: ChannelMap): ImgObj {.inline, noSideEffect.} =
+
+  reorder_impl(img, m)
+
+
+proc reorder*[ImgObj: DynamicImageObject](
+    img: ImgObj, lay: ChannelLayout): ImgObj {.inline, noSideEffect.} =
+
+  reorder_impl(img, lay.mapping)
+
+
+proc reinterpret*[ImgObj: DynamicImageObject](
+    img: ImgObj, lay: ChannelLayout): ImgObj {.inline, noSideEffect.} =
+
+  reinterpret_impl(img, lay)
 
 
 type
@@ -210,8 +281,8 @@ template initDynamicImageLike*[Img: DynamicImageObject](
     initFrame r.data_frame, im.data_order, shap
     r
 
-import ./img/img_sampling
 import ./img/img_convert
+import ./img/img_sampling
 
 export img_layout, img_sampling, img_convert
 

@@ -193,6 +193,7 @@ proc makeChannels(): NimNode {.compileTime.} =
     chenums = ""
     chidcases = newNimNode(nnkCaseStmt).add(ident"ch")
     chnamecases = newNimNode(nnkCaseStmt).add(ident"ch")
+    chbarenamecases = newNimNode(nnkCaseStmt).add(ident"ch")
     chnamespacecases = newNimNode(nnkCaseStmt).add(ident"ch")
     first = true
     skip = true
@@ -205,6 +206,7 @@ proc makeChannels(): NimNode {.compileTime.} =
 
     let
       chnamestr = namespace & name
+      barechnamestr = name
       idname = namespace & "ChId" & name
       idident = ident(idname)
 
@@ -214,6 +216,9 @@ proc makeChannels(): NimNode {.compileTime.} =
     chnamecases.add(newNimNode(nnkOfBranch).add(
       idident,
       newAssignment(ident"result", newLit(chnamestr))))
+    chbarenamecases.add(newNimNode(nnkOfBranch).add(
+      idident,
+      newAssignment(ident"result", newLit(barechnamestr))))
     chnamespacecases.add(newNimNode(nnkOfBranch).add(
       idident,
       newAssignment(ident"result", newLit(namespace))))
@@ -264,6 +269,11 @@ proc makeChannels(): NimNode {.compileTime.} =
     newIdentDefs(ident"ch", ident"ChannelId")
   ])
 
+  var barenameproc = newProc(nnkPostfix.newTree(ident"*", ident"barename"), [
+    ident"string",
+    newIdentDefs(ident"ch", ident"ChannelId")
+  ])
+
   var namespaceproc = newProc(nnkPostfix.newTree(ident"*", ident"namespace"), [
     ident"string",
     newIdentDefs(ident"ch", ident"ChannelId")
@@ -275,6 +285,9 @@ proc makeChannels(): NimNode {.compileTime.} =
   nameproc.body = newStmtList(chnamecases.copy)
   nameproc.pragma = getterPragma()
 
+  barenameproc.body = newStmtList(chbarenamecases.copy)
+  barenameproc.pragma = getterPragma()
+
   namespaceproc.body = newStmtList(chnamespacecases.copy)
   namespaceproc.pragma = getterPragma()
 
@@ -283,6 +296,7 @@ proc makeChannels(): NimNode {.compileTime.} =
 
   result.add idproc
   result.add nameproc
+  result.add barenameproc
   result.add namespaceproc
 
   addendum.copyChildrenTo(result)

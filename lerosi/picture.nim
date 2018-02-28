@@ -83,24 +83,75 @@ template readPictureData*(T: typedesc; name: untyped; data: string): untyped =
   readPictureImpl(true, T, name, data)
 
 
+proc preparePictureStb[U](image: U): U {.inline.} =
+  # TODO: Implement implicitly in the lerosi/img/img_convert submodule
+  # superseding this procedure.
+  case image.channelspace
+  of VideoChSpaceRGB:
+    if VideoChIdA in image.mapping:
+      image.reorder [VideoChIdR, VideoChIdG, VideoChIdB, VideoChIdA]
+    else:
+      image.reorder [VideoChIdR, VideoChIdG, VideoChIdB]
+  of VideoChSpaceYpCbCr:
+    if VideoChIdA in image.mapping:
+      image.reorder [VideoChIdYp, VideoChIdA]
+    else:
+      image.reorder [VideoChIdYp]
+  else:
+    # TODO: Implement me based on conversion.
+    raise newException(Exception, "LERoSI: Cannot convert to RGB, not yet implemented.")
+
+
+
 proc writePicture*[U](image: U;
                 opts: SaveOptions = SaveOptions(nil)):
                 string =
+
+  let orderedImage = preparePictureStb(image)
+
   ## write a picture to core memory
-  let ilvd = image.data_frame.interleaved
+  let ilvd = orderedImage.data_frame.interleaved
   let ilvdshape = ilvd.shape
   let innerdata = ilvd.frame_data().backend_data_raw
+
   picio_savestring_core2(innerdata, ilvdshape[0], ilvdshape[1], ilvd.channel_count, opts)
+
+template writePictureBmp*[U](image: U): string =
+  writePicture(image, SaveOptions(format: BMP))
+
+template writePicturePng*[U](image: U): string =
+  writePicture(image, SaveOptions(format: PNG, stride: 0))
+
+template writePictureHDR*[U](image: U): string =
+  writePicture(image, SaveOptions(format: HDR))
+
+template writePictureJpeg*[U](image: U, quality: range[1..100]): string =
+  writePicture(image, SaveOptions(format: JPEG, quality: quality))
+
 
 proc writePicture*[U](image: U;
                 filename: string;
                 opts: SaveOptions = SaveOptions(nil)):
                 bool =
+
+  let orderedImage = preparePictureStb(image)
+
   ## write a picture to a file
-  let ilvd = image.data_frame.interleaved
+  let ilvd = orderedImage.data_frame.interleaved
   let ilvdshape = ilvd.shape
   let innerdata = ilvd.frame_data().backend_data_raw
   picio_save_core2(innerdata, ilvdshape[0], ilvdshape[1], ilvd.channel_count, filename, opts)
 
 
+template writePictureBmp*[U](image: U, filename: string): bool =
+  writePicture(image, filename, SaveOptions(format: BMP))
+
+template writePicturePng*[U](image: U, filename: string): bool =
+  writePicture(image, filename, SaveOptions(format: PNG, stride: 0))
+
+template writePictureHDR*[U](image: U, filename: string): bool =
+  writePicture(image, filename, SaveOptions(format: HDR))
+
+template writePictureJpeg*[U](image: U, filename: string, quality: range[1..100]): bool =
+  writePicture(image, filename, SaveOptions(format: JPEG, quality: quality))
 

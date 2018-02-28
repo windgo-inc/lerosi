@@ -30,6 +30,9 @@ import lerosi/detail/picio
 import lerosi/picture
 import lerosi/img
 
+#import lerosi/backend/am/am_accessors
+#import lerosi/backend
+
 # Nicer alias for save options.
 type
   SO = SaveOptions
@@ -627,31 +630,19 @@ suite "LERoSI Unit Tests":
     checkFrameSimple myMirror.data_frame
     checkFrameAgainst myImage.data_frame, myMirror.data_frame
 
-  test "dataframe channel mutator red/blue swap":
+  test "dataframe channel mutator red/blue swap high level":
     let
-      myImage = readPictureFile(
-        byte, "*", "test/sample.bmp")
-        .swizzle(0, 1, 2)
-      refImage = readPictureFile(
-        byte, "*", "test/redbluereverse.bmp")
-        .swizzle(0, 1, 2)
+      myImage = readPictureFile(byte, "*", "test/sample.bmp")
+      refImage = readPictureFile(byte, "*", "test/redbluereverse.bmp")
 
-    echo "    # channel map in test ", myImage.layout.mapping
-    echo "    # channel map in ref  ", refImage.layout.mapping
+      targetImage = myImage.reinterpret("VideoBGR")
 
-    checkFrameSimple myImage.data_frame
+    check targetImage.writePictureBmp("test/redbluereverse_test.bmp")
+    checkFrameAgainst(
+      targetImage.reorder("VideoRGB").data_frame,
+      refImage.data_frame)
 
-    let
-      targetImage = myImage.swizzle(2, 1, 0)
-
-    check targetImage.channelspace == myImage.channelspace
-
-    echo "    # channel map is ", targetImage.layout.mapping
-
-    check targetImage.writePicture("test/redbluereverse_test.bmp", SO(format: BMP))
-    checkFrameAgainst targetImage.data_frame, refImage.data_frame
-
-  test "dataframe channel mutator red/blue swap in-place":
+  test "dataframe channel mutator red/blue swap in-place low level":
     var
       myImage = readPictureFile(
         byte, "*", "test/sample.bmp")
@@ -673,264 +664,78 @@ suite "LERoSI Unit Tests":
     check myImage.writePicture("test/redbluereverse_inplace_test.bmp", SO(format: BMP))
     checkFrameAgainst myImage.data_frame, refImage.data_frame
 
-
-  #test "img initRawImageObject":
-  #  var mySeq = toSeq(1..75)
-  #  var img = initRawImageObject("am", mySeq, [5, 5])
-
-
-  # 
-
-#[
-  template echo_props(name, pic: untyped): untyped =
-    echo "Properties of '", name, "':"
-    echo "  order: ", pic.colorspace.order
-    echo "  colorspace:       ", pic.colorspace
-    echo "  width:            ", pic.width
-    echo "  height:           ", pic.height
-
-  template read_verbose(name, T: untyped): untyped =
+  template test_closure_iter[T](it: untyped): seq[T] =
     block:
-      let pic = readImage[T](name)
-      echo_props name, pic
-      pic
+      var res1 = newSeq[T]()
 
-  test "IIO/base load test reference image (PNG)":
-    testimg = readImage[byte]("test/sample.png")
-    require_consistency testimg.data
+      while true:
+        var val = it()
+        if finished(it):
+          break
+        res1.add val
 
-  test "IIO/base getter width, extent, and dataShape consistency":
-    check testimg.width == testimg.extent(1) and testimg.width == testimg.dataShape[1]
+      res1
 
-  test "IIO/base getter height, extent, and dataShape consistency":
-    check testimg.height == testimg.extent(0) and testimg.height  == testimg.dataShape[0]
+  test "accessors sampleND/msampleND":
+    var i: int = -1
+    let myseq = newSeqWith 75:
+      inc i
+      i
 
-  #test "IIO/base interleaved to planar order":
+    var myBackend: BackendType("am", int)
+    discard myBackend.backend_data myseq.toTensor().reshape([3, 5, 5])
 
-  #test "IIO/base planar and interleaved width consistency":
-  #  img = testimg.planar
-  #  check pla
+    var sampler = initAmDirectNDSampler(myBackend)
+    for i in 0..4:
+      for j in 0..4:
+        stdout.write "(", i, ", ", j, "): ",
+          sampler.sampleND([0, i, j]), ", ",
+          sampler.sampleND([1, i, j]), ", ",
+          sampler.sampleND([2, i, j])
 
-  test "IIO/base getter colorspace":
-    check testimg.colorspace.name == "RGBA"
+        var
+          a = sampler.sampleND([0, i, j])
 
-  test "IIO/base save BMP":
-    check testimg.writeImage("test/samplepng-out2.bmp", SO(format: BMP))
+        sampler.msampleND([0, i, j]) = sampler.sampleND([2, i, j])
+        sampler.msampleND([2, i, j]) = a
 
-  test "IIO/base load BMP":
-    testimg = readImage[byte]("test/samplepng-out2.bmp")
-    require_consistency testimg.data
-
-  test "IIO/base save PNG":
-    check testimg.writeImage("test/samplepng-out2.png", SO(format: PNG, stride: 0))
-
-  test "IIO/base load PNG":
-    testimg = readImage[byte]("test/samplepng-out2.png")
-    require_consistency testimg.data
-
-  test "IIO/base save JPEG":
-    check testimg.writeImage("test/samplepng-out2.jpeg", SO(format: JPEG, quality: 100))
-
-  test "IIO/base load JPEG":
-    testimg = readImage[byte]("test/samplepng-out2.jpeg")
-    require_consistency testimg.data
-
-  test "IIO/base encode and decode BMP in-memory":
-    let coredata = writeImage(testimg, SO(format: BMP))
-    echo "    # Saved BMP size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = readImage[byte](coredata)
-    check_consistency testimg.data, recovered.data
-
-  test "IIO/base encode and decode PNG in-memory":
-    let coredata = writeImage(testimg, SO(format: PNG, stride: 0))
-    echo "    # Saved PNG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = readImage[byte](coredata)
-    check_consistency testimg.data, recovered.data
-
-  test "IIO/base encode and decode JPEG in-memory":
-    let coredata = writeImage(testimg, SO(format: JPEG, quality: 100))
-    echo "    # Saved JPEG size is ", formatFloat(coredata.len.float / 1024.0, precision = 5), "KB"
-    let recovered = readImage[byte](coredata)
-    check_consistency testimg.data, recovered.data
-]#
-
-  #test "IIO/base encode and decode HDR in-memory":
-  #  let coredata = writeImage(hdrpic, SO(format: HDR))
-  #  echo "    # Saved HDR size is ", coredata.len.float / 1024.0, "KB"
-  #  let recovered = coredata.picio_load_hdr_core
-  #  check_consistency hdrpic, recovered
-
-
-  #test "Image LDR I/O (User)":
-  #  let mypic = read_verbose("test/sample.png", byte)
-
-  #  echo "Write BMP from PNG: ",
-  #    
-  #  echo "Write PNG from PNG: ",
-  #    mypic.writeImage("test/samplepng-out2.png", SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from PNG: ",
-  #    mypic.writeImage("test/samplepng-out2.jpeg",
-  #      SO(format: JPEG, quality: 100))
-
-  #  let mypic2 = read_verbose("test/samplepng-out2.bmp", byte)
-
-  #  echo "Write BMP from BMP: ",
-  #    mypic2.writeImage("test/samplebmp-out2.bmp", SO(format: BMP))
-  #  echo "Write PNG from BMP: ",
-  #    mypic2.writeImage("test/samplebmp-out2.png", SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from BMP: ",
-  #    mypic2.writeImage("test/samplebmp-out2.jpeg",
-  #      SO(format: JPEG, quality: 100))
-
-  #  let mypicjpeg = read_verbose("test/samplepng-out2.jpeg", byte)
-
-  #  echo "Write BMP from JPEG: ",
-  #    mypicjpeg.writeImage("test/samplejpeg-out.bmp", SO(format: BMP))
-  #  echo "Write PNG from JPEG: ",
-  #    mypicjpeg.writeImage("test/samplejpeg-out.png",
-  #      SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from JPEG: ",
-  #    mypicjpeg.writeImage("test/samplejpeg-out.jpeg",
-  #      SO(format: JPEG, quality: 100))
-
-  #test "Image I/O (Internal)":
-  #  # Taken from the isMainModule tests in lerosi.nim
-  #  # TODO: Add an automatic correctness verificiation which may account for
-  #  # the drift in lossy compression methods (JPEG).
-  #  #   TODO: Use a histogram and shape test as a first pass.
-  #  echo "PNG Loaded Shape: ", testpic.shape
-
-  #  echo "Write BMP from PNG: ",
-  #    testpic.picio_save_core("test/samplepng-out.bmp", SO(format: BMP))
-  #  echo "Write PNG from PNG: ",
-  #    testpic.picio_save_core(
-  #      "test/samplepng-out.png", SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from PNG: ",
-  #    testpic.picio_save_core(
-  #      "test/samplepng-out.jpeg", SO(format: JPEG, quality: 100))
-  #  echo "Write HDR from PNG: ",
-  #    picio_save_core(testpic.asType(cfloat) / 255.0,
-  #      "test/samplepng-out.hdr", SO(format: HDR))
-
-  #  let testpic2 = "test/samplepng-out.bmp".picio_load_core()
-  #  echo "BMP Loaded Shape: ", testpic2.shape
-
-  #  echo "Write BMP from BMP: ",
-  #    testpic2.picio_save_core("test/samplebmp-out.bmp", SO(format: BMP))
-  #  echo "Write PNG from BMP: ",
-  #    testpic2.picio_save_core(
-  #      "test/samplebmp-out.png", SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from BMP: ",
-  #    testpic2.picio_save_core(
-  #      "test/samplebmp-out.jpeg", SO(format: JPEG, quality: 100))
-  #  echo "Write HDR from BMP: ",
-  #    picio_save_core(testpic2.asType(cfloat) / 255.0,
-  #      "test/samplebmp-out.hdr", SO(format: HDR))
-
-  #  let testpicjpeg = "test/samplepng-out.jpeg".picio_load_core()
-  #  echo "JPEG Loaded Shape: ", testpicjpeg.shape
-
-  #  echo "Write BMP from JPEG: ",
-  #    testpicjpeg.picio_save_core("test/samplejpeg-out.bmp", SO(format: BMP))
-  #  echo "Write PNG from JPEG: ",
-  #    testpicjpeg.picio_save_core(
-  #      "test/samplejpeg-out.png", SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from JPEG: ",
-  #    testpicjpeg.picio_save_core(
-  #      "test/samplejpeg-out.jpeg", SO(format: JPEG, quality: 100))
-  #  echo "Write HDR from JPEG: ",
-  #    picio_save_core(testpicjpeg.asType(cfloat) / 255.0,
-  #      "test/samplejpeg-out.hdr", SO(format: HDR))
-
-  #  var testpichdr = "test/samplepng-out.hdr".picio_load_hdr_core()
-  #  echo "HDR Loaded Shape: ", testpichdr.shape
-
-  #  echo "Write HDR from HDR: ",
-  #    testpichdr.picio_save_core("test/samplehdr-out.hdr", SO(format: HDR))
-
-  #  echo "Scale for the rest of the formats"
-  #  testpichdr *= 255.0
-
-  #  echo "Write BMP from HDR: ",
-  #    testpichdr.picio_save_core("test/samplehdr-out.bmp", SO(format: BMP))
-  #  echo "Write PNG from HDR: ",
-  #    testpichdr.picio_save_core(
-  #      "test/samplehdr-out.png", SO(format: PNG, stride: 0))
-  #  echo "Write JPEG from HDR: ",
-  #    testpichdr.picio_save_core(
-  #      "test/samplehdr-out.jpeg", SO(format: JPEG, quality: 100))
-
-  #  var myhdrpic = "test/samplehdr-out.hdr".picio_load_hdr_core()
-  #  echo "HDR Loaded Shape: ", myhdrpic.shape
-
-  #  echo "Writing HDR to memory to read back."
-  #  let hdrseq = myhdrpic.picio_save_core(SO(format: HDR))
-  #  #echo hdrseq
-  #  let myhdrpic2 = hdrseq.picio_load_hdr_core()
-  #  assert myhdrpic == myhdrpic2
-  #  echo "Success!"
-
-  #  myhdrpic *= 255.0
-  #  echo "Scale for the rest of the bitmap test"
-
-  #  echo "Write BMP from second HDR: ",
-  #    myhdrpic.picio_save_core("test/samplehdr2-out.bmp", SO(format: BMP))
+        echo " ~~> (", i, ", ", j, "): ",
+          sampler.sampleND([0, i, j]), ", ",
+          sampler.sampleND([1, i, j]), ", ",
+          sampler.sampleND([2, i, j])
 
 
 
-  # TODO: Insert new tests.
+  #test "backend/am backend_slice_values iterator":
+  #  var i: int = -1
+  #  let myseq = newSeqWith 75:
+  #    inc i
+  #    i
 
-  #test "Channels and channel layout properties":
-  #  template doRGBAProcs(what: untyped): untyped =
-  #    echo what, ".ChR = ", what.ChR, " and ", what, ".channel(R) = ", what.channel(ChIdR)
-  #    echo what, ".ChG = ", what.ChG, " and ", what, ".channel(G) = ", what.channel(ChIdG)
-  #    echo what, ".ChB = ", what.ChB, " and ", what, ".channel(B) = ", what.channel(ChIdB)
-  #    echo what, ".ChA = ", what.ChA, " and ", what, ".channel(A) = ", what.channel(ChIdA)
+  #  template slice_values[T](slc: var AmSliceCpu[T]): (iterator(): var T) =
+  #    (iterator (): var T =
+  #      for x in mitems(slice_data(slc)):
+  #        yield x)
 
-  #  template doYCbCrProcs(what: untyped): untyped =
-  #    echo what, ".ChY  = ", what.ChY,  " and ", what, ".channel(Y)  = ", what.channel(ChIdY)
-  #    echo what, ".ChCb = ", what.ChCb, " and ", what, ".channel(Cb) = ", what.channel(ChIdCb)
-  #    echo what, ".ChCr = ", what.ChCr, " and ", what, ".channel(Cr) = ", what.channel(ChIdCr)
+  #  var myBackend: AmBackendCpu[int]
+  #  myBackend.backend_data myseq.toTensor().reshape([3, 5, 5])
 
-  #  template doCmpChannelsTest(a, b: untyped): untyped =
-  #    echo "cmpChannels(", a, ", ", b, ") = ", cmpChannels(a, b)
+  #  var myIter1 = slice_values(myBackend.slice_channel(DataPlanar, 0))
 
-  #  let
-  #    myLayouts = [
-  #      ChLayoutRGBA.id, ChLayoutBGRA.id,
-  #      ChLayoutYCbCr.id, ChLayoutYCrCb.id
-  #    ]
+  #  let res1 = test_closure_iter(myIter1)
+  #  check res1 == toSeq(0..24)
+  #  echo res1
 
-  #  for i, layout in myLayouts:
-  #    echo "Testing ", layout, ":"
-  #    echo layout, ".len = ", layout.len
-  #    echo layout, ".channels = ", layout.channels
-  #    if i > 1: doYCbCrProcs(layout) else: doRGBAProcs(layout)
+  #  var myIter2 = slice_values(myBackend.slice_channel(DataPlanar, 1))
 
-  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutRGBA.id)
-  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutARGB.id)
-  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutRGB.id)
-  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGRA.id)
-  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutABGR.id)
-  #  doCmpChannelsTest(ChLayoutRGBA.id, ChLayoutBGR.id)
+  #  let res2 = test_closure_iter(myIter2)
+  #  check res2 == toSeq(25..49)
+  #  echo res2
 
-  #test "Copy channels":
-  #  let planarpic = readImage[byte]("test/sample.bmp").planar
-  #  let interleavedpic = planarpic.interleaved
+  #  var myIter3 = slice_values(myBackend.slice_channel(DataPlanar, 2))
 
-  #  var planaroutpic = newDynamicLayoutImage[byte](planarpic.width, planarpic.height, ChLayoutBGR.id).planar
-  #  var interleavedoutpic = planaroutpic.interleaved
-
-  #  planarpic.copyChannelsTo(planaroutpic)
-  #  interleavedpic.copyChannelsTo(interleavedoutpic)
-
-  #  check planaroutpic.writeImage("test/redbluereverse-planar2planar.bmp", SO(format: BMP))
-  #  check interleavedoutpic.writeImage("test/redbluereverse-interleaved2interleaved.bmp", SO(format: BMP))
-
-  #  planarpic.copyChannelsTo(interleavedoutpic)
-  #  interleavedpic.copyChannelsTo(planaroutpic)
-
-  #  check planaroutpic.writeImage("test/redbluereverse-interleaved2planar.bmp", SO(format: BMP))
-  #  check interleavedoutpic.writeImage("test/redbluereverse-planar2interleaved.bmp", SO(format: BMP))
+  #  let res3 = test_closure_iter(myIter3)
+  #  check res3 == toSeq(50..74)
+  #  echo res3
 
     

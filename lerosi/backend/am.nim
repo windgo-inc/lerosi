@@ -133,8 +133,44 @@ proc backend_cmp*[A, B](a: AmBackendCpu[A], b: AmBackendCpu[B]): bool {.inline.}
 # Deferred import resolves a cyclic import. With this, the storageorder
 # and slicing submodules can safely import ../amcpu, and have access to the
 # above.
+export arraymancer
 import ./am/am_storageorder
 import ./am/am_slicing
+
+export am_storageorder, am_slicing
+
+proc backend_channel_count*[T](b: var AmBackendCpu[T];
+    order: DataOrder): int {.inline.} =
+
+  backend_data_check(b)
+  case order
+  of DataPlanar: result = b.d.shape[0]
+  of DataInterleaved: result = b.d.shape[b.d.shape.len - 1]
+
+proc backend_image_shape*[T](b: var AmBackendCpu[T];
+    order: DataOrder): int {.inline.} =
+
+  backend_data_check(b)
+  case order
+  of DataPlanar: result = b.d.shape[1..b.d.shape.len - 1]
+  of DataInterleaved: result = b.d.shape[0..b.d.shape.len - 2]
+
+
+proc backend_image_cmp*[A, B](a: AmBackendCpu[A];
+    b: AmBackendCpu[B]; aOrder, bOrder: DataOrder): bool =
+
+  result = (backend_image_shape(a, aOrder) == backend_image_shape(b, bOrder)) and
+           (backend_channel_count(a, aOrder) == backend_channel_count(b, bOrder))
+
+  block CHECK_IMAGE_EQ:
+    if result:
+      for i in 0..<backend_channel_count(a, aOrder):
+        result = slice_channel(a, aOrder) == slice_channel(b, bOrder)
+        if not result:
+          break CHECK_IMAGE_EQ
+
+import ./am/am_accessors
+export am_accessors
 
 type
   AmBackendGeneral*[T] = concept backend
@@ -152,6 +188,7 @@ type
   #AmBackendNotCL*[T] = concept backend
   #  backend is AmBackend
   #  #not (backend is AmBackendCL)
+
 
 proc backend_local_source[T; U](
     dest: var AmBackendCpu[T];
@@ -264,7 +301,5 @@ implement_backend_source(AmBackendCpu, AmBackendNotCpu, to_storage_cpu_detail)
 #implement_backend_source(AmBackendCuda, AmBackendNotCuda, cuda)
 #implement_backend_source(AmBackendCL, AmBackendNotCL, opencl)
 
-export am_storageorder, am_slicing
-export arraymancer
 
 

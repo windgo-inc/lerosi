@@ -23,6 +23,7 @@
 
 import system, macros, future, strutils, sequtils
 import ../img
+import ../spacemeta
 import ../macroutil
 
 
@@ -104,6 +105,11 @@ proc defChannelLayout*(s: string): ChannelLayout {.inline, eagerCompile.} =
 
   result = defChannelLayout(space, mapping)
 
+
+converter toChannelLayout*(s: string): ChannelLayout =
+  defChannelLayout s
+
+
 proc `channelspace=`*[ImgObj: DynamicImageObject](
     img: var ImgObj, cs: ChannelSpace)
     {.inline, noSideEffect, raises: [].} =
@@ -115,4 +121,11 @@ proc `mapping=`*[ImgObj: DynamicImageObject](img: var ImgObj, m: ChannelMap)
     {.inline, noSideEffect, raises: [].} =
   ## Set the channel mapping
   img.layout.mapping = m
+
+
+proc reindex*(a, b: ChannelLayout): ChannelIndex =
+  result.setLen b.mapping.len
+  for i in 0..<b.mapping.len:
+    result[i] = find(a.mapping, b.mapping[i])
+
 
