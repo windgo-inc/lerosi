@@ -132,13 +132,11 @@ template initStridedIteration*(coord, backstrides, iter_pos: untyped, t, iter_of
 
 
 macro declMultiStridedIterationVars*(coord, backstrides, iter_pos: untyped, nmulti: untyped): untyped =
-  var
-    paramCount: int
-
-  try:
-    paramCount = int(nmulti.intVal)
-  except:
-    paramCount = MAX_IMAGE_CHANNELS
+  let
+    paramCount =
+      (case nmulti.kind
+      of nnkIntLit..nnkUInt64Lit: int(nmulti.intVal)
+      else: MAX_IMAGE_CHANNELS)
     # In this case, we inject if statements which break initialization at the
     # appropriate line, and we always unroll to maximum channel
 
@@ -164,17 +162,15 @@ macro initMultiStridedIteration*(coord, backstrides, iter_pos: untyped, t, iter_
     initBlockLabel = genSym(nskLabel, ident="MULTI_STRIDED_ITERATION")
     initBlock = nnkBlockStmt.newTree(initBlockLabel, newStmtList())
 
-    paramCount: int
-    paramCountIsDynamic = false
-
-  try:
-    paramCount = int(nmulti.intVal)
-  except:
-    paramCount = MAX_IMAGE_CHANNELS
-    paramCountIsDynamic = true
+  let
+    paramCount =
+      (case nmulti.kind
+      of nnkIntLit..nnkUInt64Lit: int(nmulti.intVal)
+      else: MAX_IMAGE_CHANNELS)
+    paramCountIsDynamic = not (nmulti.kind in {nnkIntLit..nnkUInt64Lit})
     # In this case, we inject if statements which break initialization at the
-    # appropriate line, and we always unroll to maximum channels
-
+    # appropriate line, and we always unroll to maximum channel
+    
   for i in 0..<paramCount:
     let
       next_index = i + 1
@@ -216,13 +212,27 @@ template advanceStridedIteration*(coord, backstrides, iter_pos, t, iter_offset, 
 
 macro advanceMultiStridedIteration*(coord, backstrides, iter_pos: untyped, t, iter_offsets, iter_size, nmulti, imulti: typed = 0, count: typed = 1): untyped =
   ## Computing the next positions
-  result = newStmtList()
+  var
+    advBlockLabel = genSym(nskLabel, ident="MULTI_STRIDED_ADVANCE")
+    advBlock = nnkBlockStmt.newTree(advBlockLabel, newStmtList())
+
+
+  let
+    paramCount =
+      (case nmulti.kind
+      of nnkIntLit..nnkUInt64Lit: int(nmulti.intVal)
+      else: MAX_IMAGE_CHANNELS)
+    paramCountIsDynamic = not (nmulti.kind in {nnkIntLit..nnkUInt64Lit})
+    # In this case, we inject if statements which break initialization at the
+    # appropriate line, and we always unroll to maximum channel
 
   let countDecl = newLetStmt(ident"cnt", newCall(bindSym"int", count))
-  result.add countDecl
+  advBlock[1].add countDecl
 
-  for imulti in 0..<int(nmulti.intVal):
+  for imulti in 0..<paramCount:
     let
+      next_index = imulti + 1
+
       coordIdent_u = indexNamed_impl(coord.strVal, imulti)
       iter_posIdent_u = indexNamed_impl(iter_pos.strVal, imulti)
       backstridesIdent_u = indexNamed_impl(backstrides.strVal, imulti)
@@ -267,7 +277,16 @@ macro advanceMultiStridedIteration*(coord, backstrides, iter_pos: untyped, t, it
     innerFor.add loopBody
     outerFor.add innerFor
     
-    result.add outerFor
+    advBlock[1].add outerFor
+
+    if paramCountIsDynamic:
+      advBlock[1].add nnkIfStmt.newTree(
+        nnkElifBranch.newTree(
+          infix(nmulti, "<=", newLit(next_index)),
+          nnkBreakStmt.newTree(advBlockLabel)
+        ))
+
+  result = newStmtList(advBlock)
 
 
 template stridedIterationYield*(strider: IterKind, data, i, iter_pos: typed) =
@@ -284,42 +303,55 @@ macro makeIterPosIdent(iter_pos, imulti: untyped): untyped =
 
 # Using indexNamed on iter_pos
 template multiStridedIterationYield*(
+    label_block: untyped,
     iter_pos: untyped, strider: IterKind, data,
-    iter_offsets, i, nmulti, res: typed,
+    iter_offsets, i, nmulti, dynn, res: typed,
     imulti: typed = 0, ioff: typed = 0): untyped =
+  ## Fill result pointers during multi-strided iteration
 
   when imulti < nmulti:
     when strider == IterKind.Values:
       let ipos_z = makeIterPosIdent("iter_pos", imulti) # FIXME: Should use iter_pos parameter.
       res[imulti + ioff] = cast[ptr type(data[0])](data[iter_offsets[imulti] + ipos_z].addr)
-      multiStridedIterationYield(
-        iter_pos, strider, data, iter_offsets, i, nmulti, res, imulti + 1)
+      when imulti < nmulti - 1:
+        when dynn is SomeInteger:
+          if dynn <= imulti:
+            break label_block
+        multiStridedIterationYield(label_block,
+          iter_pos, strider, data, iter_offsets, i, nmulti, dynn, res, imulti + 1)
 
     # These modes not yet supported
     #elif strider == IterKind.Iter_Values: yield (i, data[iter_pos])
     #elif strider == IterKind.Offset_Values: yield (iter_pos, data[iter_pos]) ## TODO: remove workaround for C++ backend
+    
 
 
 template multiStridedIterationYieldOffset*(offset: typed,
-    iter_pos: untyped, strider: IterKind, data,
-    iter_offsets, i, nmulti, res: typed): untyped =
+    label_block, iter_pos: untyped, strider: IterKind, data,
+    iter_offsets, i, nmulti, dynn, res: typed): untyped =
+  ## Fill result pointers during multi-strided iteration
 
-  multiStridedIterationYield(iter_pos, strider, data,
-    iter_offsets, i, nmulti, res, ioff = offset)
+  multiStridedIterationYield(label_block, iter_pos, strider, data,
+    iter_offsets, i, nmulti, dynn, res, ioff = offset)
 
 
 # Only difference is that there is considered to be only one iter_pos.
 template multiStridedIterationYieldContiguous*(
-    iter_pos: untyped, strider: IterKind, data,
-    iter_offsets, i, nmulti, res: typed,
+    label_block, iter_pos: untyped, strider: IterKind, data,
+    iter_offsets, i, nmulti, dynn, res: typed,
     imulti: typed = 0, ioff: typed = 0): untyped =
+  ## Fill result pointers during multi-strided iteration (contiguous)
 
   when imulti < nmulti:
     when strider == IterKind.Values:
       let ipos_z = iter_pos
       res[imulti + ioff] = cast[ptr type(data[0])](data[iter_offsets[imulti] + ipos_z].addr)
-      multiStridedIterationYieldContiguous(
-        iter_pos, strider, data, iter_offsets, i, nmulti, res, imulti + 1)
+      when imulti < nmulti - 1:
+        when dynn is SomeInteger:
+          if dynn <= imulti:
+            break label_block
+        multiStridedIterationYieldContiguous(label_block,
+          iter_pos, strider, data, iter_offsets, i, nmulti, dynn, res, imulti + 1)
 
     # These modes not yet supported
     #elif strider == IterKind.Iter_Values: yield (i, data[iter_pos])
@@ -327,11 +359,12 @@ template multiStridedIterationYieldContiguous*(
 
 
 template multiStridedIterationYieldContiguousOffset*(offset: typed,
-    iter_pos: untyped, strider: IterKind, data,
-    iter_offsets, i, nmulti, res: typed): untyped =
+    label_block, iter_pos: untyped, strider: IterKind, data,
+    iter_offsets, i, nmulti, dynn, res: typed): untyped =
+  ## Fill result pointers with an offset during multi-strided iteration (contiguous)
 
-  multiStridedIterationYield(iter_pos, strider, data,
-    iter_offsets, i, nmulti, res, ioff = offset)
+  multiStridedIterationYieldContiguous(label_block, iter_pos, strider, data,
+    iter_offsets, i, nmulti, dynn, res, ioff = offset)
 
 
 template stridedIteration*(strider: IterKind, t, iter_offset, iter_size: typed, adv: typed = 1): untyped =
@@ -358,6 +391,7 @@ template stridedIteration*(strider: IterKind, t, iter_offset, iter_size: typed, 
 
 
 template declMultiStridedIterationData(srcdata, res, areContiguous, itsiz, nadv, t, iter_size, adv: untyped): untyped =
+  ## Multi strided iteration data
   let
     areContiguous = t.is_C_Contiguous
     itsiz = iter_size
@@ -369,6 +403,7 @@ template declMultiStridedIterationData(srcdata, res, areContiguous, itsiz, nadv,
 
 
 template declDualMultiStridedIterationData(lhsdata, rhsdata, res, areContiguous, itsiz, nadv, tlhs, trhs, iter_size, adv: untyped): untyped =
+  ## Dual multi strided iteration data
   let
     areContiguous = t.is_C_Contiguous
     itsiz = iter_size
@@ -384,16 +419,28 @@ template declDualMultiStridedIterationData(lhsdata, rhsdata, res, areContiguous,
 
 
 template multiStridedIteration(strider, t, iter_offsets, iter_size, adv: typed, nmulti: typed): untyped =
+  ## Multi strided iteration
   when compileOption("boundChecks"):
     assert 0 <= adv,
       "LERoSI/backend/am/am_accessors: Bad adv step in multiStridedIteration"
+
+  const nmultiIsDynamic = not compiles((const nmultiConst = nmulti))
+  when nmultiIsDynamic:
+    var dynn: int = nmulti
+    const nmultiVal = MAX_IMAGE_CHANNELS
+  else:
+    var dynn {.used.} : pointer = nil
+    const nmultiVal = nmulti
+
   declMultiStridedIterationData(source, resultVector, areAllContiguous, itsiz, nadv, t, iter_size, adv)
 
   # Optimize for loops in contiguous cases
   if areAllContiguous:
     for j in countup(0, ((itsiz-1)*nadv), step=nadv):
-      multiStridedIterationYieldContiguous(j, strider, source,
-        iter_offsets, j, nmulti, resultVector)
+      block MULTI_STRIDED_CONTIGUOUS_SELECT:
+        multiStridedIterationYieldContiguous(MULTI_STRIDED_CONTIGUOUS_SELECT,
+          j, strider, source,
+          iter_offsets, j, nmultiVal, dynn, resultVector)
       # The above only sets up a yield by writing to res.
       yield resultVector
 
@@ -401,7 +448,9 @@ template multiStridedIteration(strider, t, iter_offsets, iter_size, adv: typed, 
     declMultiStridedIterationVars(coord, backstrides, iter_pos, nmulti)
     initMultiStridedIteration(coord, backstrides, iter_pos, t, iter_offsets, itsiz, nmulti)
     for j in countup(0, ((itsiz-1)*nadv), step=nadv):
-      multiStridedIterationYield(iter_pos, strider, source, iter_offsets, j, nmulti, resultVector)
+      block MULTI_STRIDED_INDEX_SELECT:
+        multiStridedIterationYield(MULTI_STRIDED_INDEX_SELECT,
+          iter_pos, strider, source, iter_offsets, j, nmultiVal, dynn, resultVector)
       yield resultVector
       advanceMultiStridedIteration(
         "coord", "backstrides", "iter_pos", t, iter_offsets, itsiz, nmulti, count = nadv)
@@ -412,6 +461,7 @@ template dualMultiStridedIteration(strider, tlhs, trhs,
     iter_size_lhs, iter_size_rhs,
     adv_lhs, adv_rhs: typed,
     nmulti_lhs, nmulti_rhs: typed): untyped =
+  ## Dual multi strided iteration
   when compileOption("boundChecks"):
     assert 0 <= adv,
       "LERoSI/backend/am/am_accessors: Bad adv step in multiStridedIteration"
@@ -420,10 +470,13 @@ template dualMultiStridedIteration(strider, tlhs, trhs,
   # Optimize for loops in contiguous cases
   if areAllContiguous:
     for j in countup(0, ((itsiz-1)*nadv), step=nadv):
-      multiStridedIterationYieldContiguous(
-        j, strider, lhsData, iter_offsets_lhs, j, nmulti_lhs, resultVector)
-      multiStridedIterationYieldContiguousOffset(MAX_IMAGE_CHANNELS,
-        j, strider, rhsData, iter_offsets_rhs, j, nmulti_rhs, resultVector)
+      block MULTI_STRIDED_CONTIGUOUS_SELECT_LEFT:
+        multiStridedIterationYieldContiguous(MULTI_STRIDED_CONTIGUOUS_SELECT_LEFT,
+          j, strider, lhsData, iter_offsets_lhs, j, nmulti_lhs, resultVector)
+      block MULTI_STRIDED_CONTIGUOUS_SELECT_RIGHT:
+        multiStridedIterationYieldContiguousOffset(
+          MAX_IMAGE_CHANNELS, MULTI_STRIDED_CONTIGUOUS_SELECT_RIGHT,
+          j, strider, rhsData, iter_offsets_rhs, j, nmulti_rhs, resultVector)
       # The above only sets up a yield by writing to res.
       yield resultVector
 
@@ -441,9 +494,10 @@ template dualMultiStridedIteration(strider, tlhs, trhs,
       tlhs, iter_offsets_rhs, itsiz, nmulti_rhs)
 
     for j in countup(0, ((itsiz-1)*nadv), step=nadv):
-      multiStridedIterationYield(
+      multiStridedIterationYield(MULTI_STRIDED_INDEX_SELECT_LEFT,
         iter_pos_lhs, strider, lhsData, iter_offsets, j, nmulti, resultVector)
-      multiStridedIterationYieldOffset(MAX_IMAGE_CHANNELS,
+      multiStridedIterationYieldOffset(
+        MAX_IMAGE_CHANNELS, MULTI_STRIDED_INDEX_SELECT_RIGHT,
         iter_pos_rhs, strider, rhsData, iter_offsets, j, nmulti, resultVector)
       yield resultVector
       advanceMultiStridedIteration(
@@ -473,7 +527,7 @@ template channelStridedIteration*(s1, order, i: typed): untyped =
 template declMultiChannelStridedIterationData(
     msrc, t, totalsize, offsets, adv: untyped;
     s, order: typed): untyped =
-
+  ## Multi channel strided iteration data
   var
     msrc = s.msource
     t = msrc[].backend_data
@@ -635,54 +689,62 @@ iterator sampleNDchannels*[T](
 
 iterator sampleNDchannels*[T](
     s1: AmDirectNDSampler[T],
-    ind: array[1, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-  for x in sampleNDchannels(s1, ind[0]):
-    yield x
+    ind: openarray[int]): array[MAX_IMAGE_CHANNELS, ptr T] =
+  expandMacros:
+    let samplerChannelIndexLen = ind.len
+    multiChannelStridedIteration(s1, s1.order, ind, samplerChannelIndexLen)
 
 
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T],
-    ind: array[2, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-  for x in sampleNDchannels(s1, ind[0], ind[1]):
-    yield x
-
-
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T],
-    ind: array[3, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-  for x in sampleNDchannels(s1, ind[0], ind[1], ind[2]):
-    yield x
-
-
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T],
-    ind: array[4, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-  for x in sampleNDchannels(s1, ind[0], ind[1], ind[2], ind[3]):
-    yield x
-
-
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T],
-    ind: array[5, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-  for x in sampleNDchannels(s1,
-      ind[0], ind[1], ind[2], ind[3], ind[4]):
-    yield x
-
-
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T],
-    ind: array[6, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-  for x in sampleNDchannels(s1,
-      ind[0], ind[1], ind[2], ind[3], ind[4], ind[5]):
-    yield x
-
-
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T],
-    ind: array[7, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-  for x in sampleNDchannels(s1,
-      ind[0], ind[1], ind[2], ind[3], ind[4], ind[5], ind[6]):
-    yield x
+#iterator sampleNDchannels*[T](
+#    s1: AmDirectNDSampler[T],
+#    ind: array[1, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
+#  for x in sampleNDchannels(s1, ind[0]):
+#    yield x
+#
+#
+#iterator sampleNDchannels*[T](
+#    s1: AmDirectNDSampler[T],
+#    ind: array[2, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
+#  for x in sampleNDchannels(s1, ind[0], ind[1]):
+#    yield x
+#
+#
+#iterator sampleNDchannels*[T](
+#    s1: AmDirectNDSampler[T],
+#    ind: array[3, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
+#  for x in sampleNDchannels(s1, ind[0], ind[1], ind[2]):
+#    yield x
+#
+#
+#iterator sampleNDchannels*[T](
+#    s1: AmDirectNDSampler[T],
+#    ind: array[4, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
+#  for x in sampleNDchannels(s1, ind[0], ind[1], ind[2], ind[3]):
+#    yield x
+#
+#
+#iterator sampleNDchannels*[T](
+#    s1: AmDirectNDSampler[T],
+#    ind: array[5, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
+#  for x in sampleNDchannels(s1,
+#      ind[0], ind[1], ind[2], ind[3], ind[4]):
+#    yield x
+#
+#
+#iterator sampleNDchannels*[T](
+#    s1: AmDirectNDSampler[T],
+#    ind: array[6, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
+#  for x in sampleNDchannels(s1,
+#      ind[0], ind[1], ind[2], ind[3], ind[4], ind[5]):
+#    yield x
+#
+#
+#iterator sampleNDchannels*[T](
+#    s1: AmDirectNDSampler[T],
+#    ind: array[7, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
+#  for x in sampleNDchannels(s1,
+#      ind[0], ind[1], ind[2], ind[3], ind[4], ind[5], ind[6]):
+#    yield x
 
 
 template stridedCoordsIteration*(t, iter_offset, iter_size: typed): untyped =
