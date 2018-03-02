@@ -25,7 +25,7 @@
 
 import system, macros, sequtils, strutils, tables
 
-import ./macroutil
+import ./detail/macroutil
 
 var backendIndex           {.compileTime.} = initTable[string, int]()
 var backendByTypenameIndex {.compileTime.} = initTable[string, int]()

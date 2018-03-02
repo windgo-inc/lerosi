@@ -25,7 +25,7 @@ import system, sequtils, strutils, unittest, macros, math, future, algorithm
 import typetraits
 
 import lerosi
-import lerosi/macroutil
+import lerosi/detail/macroutil
 import lerosi/detail/picio
 import lerosi/picture
 import lerosi/img
@@ -677,7 +677,7 @@ suite "LERoSI Unit Tests":
       res1
 
   test "accessors sampleND/msampleND":
-    var i: int = -1
+    var i: int = 0
     let myseq = newSeqWith 75:
       inc i
       i
@@ -685,7 +685,7 @@ suite "LERoSI Unit Tests":
     var myBackend: BackendType("am", int)
     discard myBackend.backend_data myseq.toTensor().reshape([3, 5, 5])
 
-    var sampler = initAmDirectNDSampler(myBackend)
+    var sampler = initAmDirectNDSampler(myBackend, DataPlanar)
     for i in 0..4:
       for j in 0..4:
         stdout.write "(", i, ", ", j, "): ",
@@ -703,6 +703,38 @@ suite "LERoSI Unit Tests":
           sampler.sampleND([0, i, j]), ", ",
           sampler.sampleND([1, i, j]), ", ",
           sampler.sampleND([2, i, j])
+
+    echo "Iterator sampleND over planar storage"
+    for s in sampler.sampleND:
+      echo "... sample = ", s
+
+    echo "Iterator sampleNDchannel strided iteration of planar storage"
+    for i in 0..2:
+      echo "Taking samples by strided iteration from sampleNDchannel(DataPlanar, ", i, ")"
+      for s in sampler.sampleNDchannel(i):
+        echo "... sample = ", s
+
+    echo "Taking samples by strided iteration from sampleNDchannels(DataPlanar, [0, 1, 2])"
+    for s in sampler.sampleNDchannels([0, 1, 2]):
+      echo "ITER ", s[0][], ", ", s[1][], ", ", s[2][]
+
+
+    backend_rotate myBackend, DataInterleaved
+    sampler = initAmDirectNDSampler(myBackend, DataInterleaved)
+
+    echo "Iterator sampleND over interleaved storage"
+    for s in sampler.sampleND:
+      echo "... sample = ", s
+
+    echo "Iterator sampleNDchannel strided iteration of interleaved storage"
+    for i in 0..2:
+      echo "Taking samples by strided iteration from sampleNDchannel(DataInterleaved, ", i, ")"
+      for s in sampler.sampleNDchannel(i):
+        echo "... sample = ", s
+    
+    echo "Taking samples by strided iteration from sampleNDchannels(DataPlanar, [0, 1, 2])"
+    for s in sampler.sampleNDchannels(0, 1, 2):
+      echo "ITER ", s[0][], ", ", s[1][], ", ", s[2][]
 
 
 

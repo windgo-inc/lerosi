@@ -19,7 +19,7 @@
 
 
 import system, sequtils, future
-import macros, ./macroutil
+import macros, ./detail/macroutil
 
 
 type FixedSeq*[T; N: static[int]] = object

@@ -23,7 +23,7 @@
 
 import system, macros, future, strutils, sequtils
 import ../img
-import ../macroutil
+import ../detail/macroutil
 
 
 #proc spaceTransProcAst*(layoutIn, layoutOut: ChannelLayout): seq[NimNode] {.compileTime.} =

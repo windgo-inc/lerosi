@@ -23,7 +23,7 @@
 
 import system, macros, strutils
 
-import ./macroutil
+import ./detail/macroutil
 import ./fixedseq
 
 const

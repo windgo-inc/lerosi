@@ -24,7 +24,7 @@
 import system, macros, future, strutils, sequtils
 import ../img
 import ../spacemeta
-import ../macroutil
+import ../detail/macroutil
 
 
 proc defChannelMap*(s: string): ChannelMap {.inline.} =

@@ -24,7 +24,6 @@
 import macros, streams, os, system, sequtils, strutils, math, algorithm, future
 import arraymancer
 
-import ../macroutil
 import ../spaceconf
 import ../dataframe
 import ../fixedseq
@@ -32,7 +31,9 @@ import ../fixedseq
 # import the generic backend module
 import ../backend
 
+import ./macroutil
 import ./picio_detail
+
 include ./stb_bindings
 
 export picio_detail.PicIOError

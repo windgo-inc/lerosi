@@ -22,7 +22,7 @@
 # SOFTWARE.
 
 import system, macros, strutils, sequtils
-import ./macroutil
+import ./detail/macroutil
 import ./fixedseq
 import ./spaceconf
 

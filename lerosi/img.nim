@@ -25,7 +25,7 @@
 import macros, sequtils, strutils, tables, future
 import system
 
-import ./macroutil
+import ./detail/macroutil
 import ./fixedseq
 import ./dataframe
 import ./spacemeta

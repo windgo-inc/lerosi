@@ -147,13 +147,21 @@ proc backend_channel_count*[T](b: var AmBackendCpu[T];
   of DataPlanar: result = b.d.shape[0]
   of DataInterleaved: result = b.d.shape[b.d.shape.len - 1]
 
+
 proc backend_image_shape*[T](b: var AmBackendCpu[T];
-    order: DataOrder): int {.inline.} =
+    order: DataOrder): MetadataArray {.inline.} =
 
   backend_data_check(b)
   case order
   of DataPlanar: result = b.d.shape[1..b.d.shape.len - 1]
   of DataInterleaved: result = b.d.shape[0..b.d.shape.len - 2]
+
+
+proc backend_image_size*[T](b: var AmBackendCpu[T];
+    order: DataOrder): int {.inline.} =
+
+  result = 1
+  for x in b.backend_image_shape(order): result *= x
 
 
 proc backend_image_cmp*[A, B](a: AmBackendCpu[A];
