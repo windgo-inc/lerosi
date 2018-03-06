@@ -26,6 +26,8 @@ import typetraits
 
 import lerosi
 import lerosi/detail/macroutil
+import lerosi/detail/iterutil
+import lerosi/detail/ptrarith
 import lerosi/detail/picio
 import lerosi/picture
 import lerosi/img
@@ -676,16 +678,36 @@ suite "LERoSI Unit Tests":
 
       res1
 
-  test "accessors sampleND/msampleND":
-    var i: int = 0
-    let myseq = newSeqWith 75:
-      inc i
-      i
+suite "backend/accessors":
+  var i: int = 0
+  let myseq = newSeqWith 75:
+    inc i
+    i
 
-    var myBackend: BackendType("am", int)
-    discard myBackend.backend_data myseq.toTensor().reshape([3, 5, 5])
+  var mutableBackend: BackendType("am", int)
+  discard mutableBackend.backend_data myseq.toTensor().reshape([3, 5, 5])
 
-    var sampler = initAmDirectNDSampler(myBackend, DataPlanar)
+  let expected_planar = toSeq(51..75) & toSeq(26..50) & toSeq(1..25)
+  var expected_interleaved {.noInit.}: array[75, int]
+  for i in 0..<25:
+    expected_interleaved[i*3] = expected_planar[i]
+    expected_interleaved[i*3 + 1] = expected_planar[i+25]
+    expected_interleaved[i*3 + 2] = expected_planar[i+50]
+
+  test "consistent expected_planar and expected_interleaved":
+    for i in 0..<25:
+      require expected_interleaved[i*3] == expected_planar[i]
+      require expected_interleaved[i*3 + 1] == expected_planar[i+25]
+      require expected_interleaved[i*3 + 2] == expected_planar[i+50]
+
+  var referenceBackend: BackendType("am", int)
+  referenceBackend.backend_data expected_planar.toTensor().reshape([3, 5, 5])
+
+  var interleavedBackend: BackendType("am", int)
+  interleavedBackend.backend_data expected_interleaved.toTensor().reshape([5, 5, 3])
+
+  test "accessors sampleND/msampleND planar swizzle":
+    var sampler = initAmDirectNDSampler(mutableBackend, DataPlanar)
     for i in 0..4:
       for j in 0..4:
         stdout.write "(", i, ", ", j, "): ",
@@ -693,9 +715,7 @@ suite "LERoSI Unit Tests":
           sampler.sampleND([1, i, j]), ", ",
           sampler.sampleND([2, i, j])
 
-        var
-          a = sampler.sampleND([0, i, j])
-
+        let a = sampler.sampleND([0, i, j])
         sampler.msampleND([0, i, j]) = sampler.sampleND([2, i, j])
         sampler.msampleND([2, i, j]) = a
 
@@ -704,37 +724,223 @@ suite "LERoSI Unit Tests":
           sampler.sampleND([1, i, j]), ", ",
           sampler.sampleND([2, i, j])
 
-    echo "Iterator sampleND over planar storage"
+    var i: int = 0
     for s in sampler.sampleND:
-      echo "... sample = ", s
+      check expected_planar[i] == s
+      inc i
 
-    echo "Iterator sampleNDchannel strided iteration of planar storage"
-    for i in 0..2:
-      echo "Taking samples by strided iteration from sampleNDchannel(DataPlanar, ", i, ")"
-      for s in sampler.sampleNDchannel(i):
-        echo "... sample = ", s
+  test "Iterator sampleNDchannel planar":
+    var sampler = initAmDirectNDSampler(referenceBackend, DataPlanar)
+    for c in 0..2:
+      var i: int = 0
+      for s in sampler.sampleNDchannel(c):
+        check expected_planar[i+(c*25)] == s
+        inc i
+      check i == 25
 
-    echo "Taking samples by strided iteration from sampleNDchannels(DataPlanar, [0, 1, 2])"
+  test "Iterator sampleNDchannels planar static [0, 1, 2]":
+    var sampler = initAmDirectNDSampler(referenceBackend, DataPlanar)
+    var i: int = 0
     for s in sampler.sampleNDchannels([0, 1, 2]):
-      echo "ITER ", s[0][], ", ", s[1][], ", ", s[2][]
+      check s[0] == expected_planar[i]
+      check s[1] == expected_planar[i+25]
+      check s[2] == expected_planar[i+50]
+      inc i
+    check i == 25
+
+  test "Iterator sampleNDchannels planar static [2, 1, 0]":
+    var sampler = initAmDirectNDSampler(referenceBackend, DataPlanar)
+    var i: int = 0
+    for s in sampler.sampleNDchannels([2, 1, 0]):
+      check s[0] == expected_planar[i+50]
+      check s[1] == expected_planar[i+25]
+      check s[2] == expected_planar[i]
+      inc i
+    check i == 25
+
+  test "Iterator sampleNDchannels planar dynamic permutations of [0, 1, 2]":
+    var dynIndex = [0.int, 1, 2]
+    var offIndex = [0.int, 25, 50]
+    var sampler = initAmDirectNDSampler(referenceBackend, DataPlanar)
+    while true:
+      var i: int = 0
+      for s in sampler.sampleNDchannels(dynIndex):
+        check s[0] == expected_planar[i+offIndex[dynIndex[0]]]
+        check s[1] == expected_planar[i+offIndex[dynIndex[1]]]
+        check s[2] == expected_planar[i+offIndex[dynIndex[2]]]
+        inc i
+      check i == 25
+
+      if not dynIndex.nextPermutation():
+        break
+
+  test "Iterator sampleNDchannel interleaved":
+    var sampler = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+    for c in 0..2:
+      var i: int = 0
+      for s in sampler.sampleNDchannel(c):
+        check expected_planar[i+(c*25)] == s
+        inc i
+      check i == 25
+
+  test "Iterator sampleNDchannels interleaved static [0, 1, 2]":
+    var sampler = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+    var i: int = 0
+    for s in sampler.sampleNDchannels([0, 1, 2]):
+      check s[0] == expected_planar[i]
+      check s[1] == expected_planar[i+25]
+      check s[2] == expected_planar[i+50]
+      inc i
+    check i == 25
+
+  test "Iterator sampleNDchannels interleaved static [2, 1, 0]":
+    var sampler = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+    var i: int = 0
+    for s in sampler.sampleNDchannels([2, 1, 0]):
+      check s[0] == expected_planar[i+50]
+      check s[1] == expected_planar[i+25]
+      check s[2] == expected_planar[i]
+      inc i
+    check i == 25
+
+  test "Iterator sampleNDchannels interleaved dynamic permutations of [0, 1, 2]":
+    var dynIndex = [0.int, 1, 2]
+    var offIndex = [0.int, 25, 50]
+    var sampler = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+    while true:
+      var i: int = 0
+      for s in sampler.sampleNDchannels(dynIndex):
+        check s[0] == expected_planar[i+offIndex[dynIndex[0]]]
+        check s[1] == expected_planar[i+offIndex[dynIndex[1]]]
+        check s[2] == expected_planar[i+offIndex[dynIndex[2]]]
+        inc i
+      check i == 25
+
+      if not dynIndex.nextPermutation():
+        break
 
 
-    backend_rotate myBackend, DataInterleaved
-    sampler = initAmDirectNDSampler(myBackend, DataInterleaved)
+  test "Iterator sampleDualNDchannels planar static [0, 1, 2]":
+    expandMacros:
+      ##test "Iterator sampleDualNDchannels planar static [0, 1, 2]":
+      var sampler1 = initAmDirectNDSampler(referenceBackend, DataPlanar)
+      var sampler2 = initAmDirectNDSampler(referenceBackend, DataPlanar)
+      var i: int = 0
+      for s in sampleDualNDchannels(sampler1, sampler2, [0, 1, 2], [0, 1, 2]):
+        for k in 0..2:
+          check s.lhs(k) == s.rhs(k)
+        inc i
+      check i == 25
 
-    echo "Iterator sampleND over interleaved storage"
-    for s in sampler.sampleND:
-      echo "... sample = ", s
 
-    echo "Iterator sampleNDchannel strided iteration of interleaved storage"
-    for i in 0..2:
-      echo "Taking samples by strided iteration from sampleNDchannel(DataInterleaved, ", i, ")"
-      for s in sampler.sampleNDchannel(i):
-        echo "... sample = ", s
-    
-    echo "Taking samples by strided iteration from sampleNDchannels(DataPlanar, [0, 1, 2])"
-    for s in sampler.sampleNDchannels(0, 1, 2):
-      echo "ITER ", s[0][], ", ", s[1][], ", ", s[2][]
+  test "Iterator sampleDualNDchannels planar static [0, 1, 2], [2, 1, 0]":
+    expandMacros:
+      ##test "Iterator sampleDualNDchannels planar static [0, 1, 2], [2, 1, 0]":
+      var sampler1 = initAmDirectNDSampler(referenceBackend, DataPlanar)
+      var sampler2 = initAmDirectNDSampler(referenceBackend, DataPlanar)
+      var i: int = 0
+      for s in sampleDualNDchannels(sampler1, sampler2, [0, 1, 2], [2, 1, 0]):
+        for k in 0..2:
+          check s.lhs(k) == s.rhs(2 - k)
+        inc i
+      check i == 25
+
+
+  test "Iterator sampleDualNDchannels interleaved static [0, 1, 2]":
+    expandMacros:
+      ##test "Iterator sampleDualNDchannels interleaved static [0, 1, 2]":
+      var sampler1 = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+      var sampler2 = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+      var i: int = 0
+      for s in sampleDualNDchannels(sampler1, sampler2, [0, 1, 2], [0, 1, 2]):
+        for k in 0..2:
+          check s.lhs(k) == s.rhs(k)
+        inc i
+      check i == 25
+
+
+  test "Iterator sampleDualNDchannels interleaved static [0, 1, 2], [2, 1, 0]":
+    expandMacros:
+      ##test "Iterator sampleDualNDchannels interleaved static [0, 1, 2], [2, 1, 0]":
+      var sampler1 = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+      var sampler2 = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+      var i: int = 0
+      for s in sampleDualNDchannels(sampler1, sampler2, [0, 1, 2], [2, 1, 0]):
+        for k in 0..2:
+          check s.lhs(k) == s.rhs(2 - k)
+        inc i
+      check i == 25
+
+
+  test "Iterator sampleDualNDchannels (planar, interleaved) static [0, 1, 2]":
+    expandMacros:
+      ##test "Iterator sampleDualNDchannels (planar, interleaved) static [0, 1, 2]":
+      var sampler1 = initAmDirectNDSampler(referenceBackend, DataPlanar)
+      var sampler2 = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+      var i: int = 0
+      for s in sampleDualNDchannels(sampler1, sampler2, [0, 1, 2], [0, 1, 2]):
+        for k in 0..2:
+          check s.lhs(k) == s.rhs(k)
+        inc i
+      check i == 25
+
+
+  test "Iterator sampleDualNDchannels (planar, interleaved) static [0, 1, 2], [2, 1, 0]":
+    expandMacros:
+      ##test "Iterator sampleDualNDchannels (planar, interleaved) static [0, 1, 2], [2, 1, 0]":
+      var sampler1 = initAmDirectNDSampler(referenceBackend, DataPlanar)
+      var sampler2 = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+      var i: int = 0
+      for s in sampleDualNDchannels(sampler1, sampler2, [0, 1, 2], [2, 1, 0]):
+        for k in 0..2:
+          check s.lhs(k) == s.rhs(2 - k)
+        inc i
+      check i == 25
+
+
+  test "Iterator sampleDualNDchannels (interleaved, planar) static [0, 1, 2]":
+    expandMacros:
+      ##test "Iterator sampleDualNDchannels (interleaved, planar) static [0, 1, 2]":
+      var sampler1 = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+      var sampler2 = initAmDirectNDSampler(referenceBackend, DataPlanar)
+      var i: int = 0
+      for s in sampleDualNDchannels(sampler1, sampler2, [0, 1, 2], [0, 1, 2]):
+        for k in 0..2:
+          check s.lhs(k) == s.rhs(k)
+        inc i
+      check i == 25
+
+
+  test "Iterator sampleDualNDchannels (interleaved, planar) static [0, 1, 2], [2, 1, 0]":
+    expandMacros:
+      ##test "Iterator sampleDualNDchannels (interleaved, planar) static [0, 1, 2], [2, 1, 0]":
+      var sampler1 = initAmDirectNDSampler(interleavedBackend, DataInterleaved)
+      var sampler2 = initAmDirectNDSampler(referenceBackend, DataPlanar)
+      var i: int = 0
+      for s in sampleDualNDchannels(sampler1, sampler2, [0, 1, 2], [2, 1, 0]):
+        for k in 0..2:
+          check s.lhs(k) == s.rhs(2 - k)
+        inc i
+      check i == 25
+
+
+
+  #  backend_rotate myBackend, DataInterleaved
+  #  sampler = initAmDirectNDSampler(myBackend, DataInterleaved)
+
+  #  echo "Iterator sampleND over interleaved storage"
+  #  for s in sampler.sampleND:
+  #    echo "... sample = ", s
+
+  #  echo "Iterator sampleNDchannel strided iteration of interleaved storage"
+  #  for i in 0..2:
+  #    echo "Taking samples by strided iteration from sampleNDchannel(DataInterleaved, ", i, ")"
+  #    for s in sampler.sampleNDchannel(i):
+  #      echo "... sample = ", s
+  #  
+  #  echo "Taking samples by strided iteration from sampleNDchannels(DataPlanar, [0, 1, 2])"
+  #  for s in sampler.sampleNDchannels([0, 1, 2]):
+  #    echo "ITER ", s[0], ", ", s[1], ", ", s[2]
 
 
 

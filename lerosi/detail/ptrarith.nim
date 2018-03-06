@@ -21,21 +21,23 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import macros, sequtils, strutils
+# from https://forum.nim-lang.org/t/1188#7366 by Jehan
 
-template toClosure*(i: typed): iterator() =
-  ## Wrap an inline iterator in a first-class closure iterator.
-  iterator j(): type(i) {.closure.} =
-    for x in i:
-      yield x
-  j
+template ptradd*[T](p: ptr T, off: int): ptr T =
+  cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
 
-template asArray*[T](p:pointer):auto =
-  type A{.unchecked.} = array[0..0,T]
-  cast[ptr A](p)
+template ptrinc*[T](p: ptr T, off: int) =
+  p = ptradd(p, off)
 
+template ptrsub*[T](p: ptr T, off: int): ptr T =
+  cast[ptr type(p[])](cast[ByteAddress](p) -% off * sizeof(p[]))
 
-template uncheckedArray*[T](p:typed):auto =
-  asArray[T](p[0].unsafeAddr)
+template ptrdec*[T](p: ptr T, off: int) =
+  p = ptrsub(p, off)
 
+template ptrget*[T](p: ptr T, off: int): T =
+  ptradd(p, off)[]
+
+template ptrset*[T](p: ptr T, off: int, val: T) =
+  ptradd(p, off)[] = val
 

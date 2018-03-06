@@ -33,15 +33,63 @@ import ../../spaceconf
 import ../../detail/memhint
 import ../../detail/iterutil
 import ../../detail/macroutil
-
+import ../../detail/ptrarith
 
 type
   AmDirectNDSampler*[T] = object
     order: DataOrder
     msource: ptr AmBackendCpu[T]
 
+  AmSampleArray*{.shallow.}[T] = object
+    mtab: array[MAX_IMAGE_CHANNELS, ptr T]
 
-proc initAmDirectNDSampler*[T](b: var AmBackendCpu[T], order: DataOrder): AmDirectNDSampler[T] =
+  AmDualSampleArray*{.shallow.}[T] = object
+    mtab: array[MAX_IMAGE_CHANNELS*2+1, ptr T]
+
+  AmDualTypeSampleArray*{.shallow.}[T; U] = object
+    mtab: array[MAX_IMAGE_CHANNELS*2+1, pointer]
+
+
+proc `[]`*[T, I: SomeInteger](s: AmSampleArray[T]; i: I): T {.inline.} =
+  ## Accessor for the sample pointer array
+  s.mtab[i][]
+
+proc `[]`*[T, I: SomeInteger](s: var AmSampleArray[T]; i: I): var T {.inline.} =
+  ## Mutable accessor for the sample pointer array
+  s.mtab[i][]
+
+proc `[]=`*[T, I: SomeInteger](s: var AmSampleArray[T]; i: I, v: T) {.inline.} =
+  ## Assignment for the sample pointer array
+  s.mtab[i][] = v
+
+proc `[]=`*[T, I: SomeInteger](s: var AmSampleArray[T]; i: I, v: ptr T) {.inline.} =
+  ## Pointer assignment for the sample pointer array
+  s.mtab[i] = v
+
+proc lhs*[T; I: SomeInteger](ds: AmDualSampleArray[T], i: I): var T {.inline.} =
+  ## Index left hand side of dual sample array as a sample var binding.
+  ds.mtab[i][]
+
+proc rhs*[T; I: SomeInteger](ds: AmDualSampleArray[T], i: I): var T {.inline.} =
+  ## Index right hand side of dual sample array as a sample var binding.
+  ds.mtab[i+MAX_IMAGE_CHANNELS+1][]
+
+proc lhs*[T; U; I: SomeInteger](ds: AmDualTypeSampleArray[T, U], i: I): var T {.inline.} =
+  ## Index left hand side of a dual type sample array as a sample var binding
+  ## taking the first type (T).
+  cast[ptr T](ds.mtab[i])[]
+
+proc rhs*[T; U; I: SomeInteger](ds: AmDualTypeSampleArray[T, U], i: I): var U {.inline.} =
+  ## Index right hand side of a dual type sample array as a sample var binding
+  ## taking the first type (U).
+  cast[ptr U](ds.mtab[i+MAX_IMAGE_CHANNELS+1])[]
+
+
+proc initAmDirectNDSampler*[T](
+    b: var AmBackendCpu[T],
+    order: DataOrder): AmDirectNDSampler[T] =
+  ## Initialize a direct n-dimensional sampler
+
   result.msource = b.addr
   result.order = order
 
@@ -67,8 +115,10 @@ proc tensorAt[T](t: var Tensor[T]; ind: openarray[int]): var T =
   result = t.data[t.tensorIndex(ind)]
 
 
-# Super inefficient temporary implementation, using tensorIndex; see above. Proof of concept. Where do we go from here?
-proc msampleND*[T: SomeNumber](samp: AmDirectNDSampler[T]; ind: varargs[int]): var T =
+# Super inefficient temporary implementation, using tensorIndex; see above.
+# Proof of concept. Where do we go from here?
+proc msampleND*[T: SomeNumber](samp: AmDirectNDSampler[T]; ind: varargs[int]):
+  var T =
   samp.msource[].backend_data.tensorAt(ind)
 
 
@@ -146,9 +196,9 @@ macro declMultiStridedIterationVars*(coord, backstrides, iter_pos: untyped, nmul
       next_index = i + 1
 
     var
-      coordIdent = ident("coord" & $i)
-      backstridesIdent = ident("backstrides" & $i)
-      iter_posIdent = ident("iter_pos" & $i)
+      coordIdent = ident($coord & $i)
+      backstridesIdent = ident($backstrides & $i)
+      iter_posIdent = ident($iter_pos & $i)
     
     result.add newCall(bindSym"declStridedIterationVars", [
       coordIdent,
@@ -157,7 +207,24 @@ macro declMultiStridedIterationVars*(coord, backstrides, iter_pos: untyped, nmul
     ])
 
 
-macro initMultiStridedIteration*(coord, backstrides, iter_pos: untyped, t, iter_offsets, iter_size: typed, nmulti: untyped): untyped =
+template isDynamicParamCount(count, isDynamic: untyped;
+    nmulti: NimNode): untyped =
+  ## Determine if the value of nmulti can be statically interpreted.
+
+  let
+    count =
+      (case nmulti.kind
+      of nnkIntLit..nnkUInt64Lit: int(nmulti.intVal)
+      else: MAX_IMAGE_CHANNELS)
+    isDynamic = not (nmulti.kind in {nnkIntLit..nnkUInt64Lit})
+    # In the dynamic case, we inject if statements which break initialization
+    # at the appropriate line, and we always unroll to maximum channel
+
+
+macro initMultiStridedIteration*(coord, backstrides, iter_pos: untyped;
+    t, iter_offsets, iter_size: typed, nmulti: untyped): untyped =
+  ## Initialize multi strided iteration
+
   var
     initBlockLabel = genSym(nskLabel, ident="MULTI_STRIDED_ITERATION")
     initBlock = nnkBlockStmt.newTree(initBlockLabel, newStmtList())
@@ -175,10 +242,13 @@ macro initMultiStridedIteration*(coord, backstrides, iter_pos: untyped, t, iter_
     let
       next_index = i + 1
 
-    var
-      coordIdent = ident("coord" & $i)
-      backstridesIdent = ident("backstrides" & $i)
-      iter_posIdent = ident("iter_pos" & $i)
+      #coordIdent_u = indexNamed_impl(coord.strVal, i)
+      #iter_posIdent_u = indexNamed_impl(iter_pos.strVal, i)
+      #backstridesIdent_u = indexNamed_impl(backstrides.strVal, i)
+
+      coordIdent = ident(toStrLit(coord).strVal & $i)
+      iter_posIdent = ident(toStrLit(iter_pos).strVal & $i)
+      backstridesIdent = ident(toStrLit(backstrides).strVal & $i)
     
     initBlock[1].add newCall(bindSym"initStridedIteration", [
       coordIdent,
@@ -197,7 +267,8 @@ macro initMultiStridedIteration*(coord, backstrides, iter_pos: untyped, t, iter_
 
   result = newStmtList(initBlock)
 
-template advanceStridedIteration*(coord, backstrides, iter_pos, t, iter_offset, iter_size: typed, count: typed = 1): untyped =
+template advanceStridedIteration*(coord, backstrides, iter_pos,
+    t, iter_offset, iter_size: typed, count: typed = 1): untyped =
   ## Computing the next position
   for rep in 0..<count: # FIXME: This is bad news.
     for k in countdown(t.rank - 1,0):
@@ -210,7 +281,9 @@ template advanceStridedIteration*(coord, backstrides, iter_pos, t, iter_offset, 
         iter_pos -= backstrides[k]
 
 
-macro advanceMultiStridedIteration*(coord, backstrides, iter_pos: untyped, t, iter_offsets, iter_size, nmulti, imulti: typed = 0, count: typed = 1): untyped =
+macro advanceMultiStridedIteration*(coord, backstrides, iter_pos: untyped,
+    t, iter_offsets, iter_size, nmulti,
+    imulti: typed = 0, count: typed = 1): untyped =
   ## Computing the next positions
   var
     advBlockLabel = genSym(nskLabel, ident="MULTI_STRIDED_ADVANCE")
@@ -291,14 +364,37 @@ macro advanceMultiStridedIteration*(coord, backstrides, iter_pos: untyped, t, it
 
 template stridedIterationYield*(strider: IterKind, data, i, iter_pos: typed) =
   ## Iterator the return value
-  when strider == IterKind.Values: yield data[iter_pos]
-  elif strider == IterKind.Iter_Values: yield (i, data[iter_pos])
-  elif strider == IterKind.Offset_Values: yield (iter_pos, data[iter_pos]) ## TODO: remove workaround for C++ backend
+  #when strider == IterKind.Values:
+  static:
+    echo type(data).name
+    echo type(data[iter_pos]).name
+  yield data[iter_pos]
+  #elif strider == IterKind.Iter_Values: yield (i, data[iter_pos])
+  #elif strider == IterKind.Offset_Values: yield (iter_pos, data[iter_pos]) ## TODO: remove workaround for C++ backend
 
 
-macro makeIterPosIdent(iter_pos, imulti: untyped): untyped =
+macro makeIterPosIdent(iter_pos, imulti: untyped, nmulti: untyped): untyped =
   #echo iter_pos.strVal, " ", iter_pos.kind
-  result = ident(iter_pos.strVal & $(imulti.intVal))
+  case nmulti.kind:
+  of nnkIntLit..nnkUInt64Lit:
+    let nmulti_currval = nmulti.intVal
+    if nmulti_currval > imulti.intVal:
+      result = ident($iter_pos & $(imulti.intVal))
+    else:
+      result = newLit(0)
+    echo "known nmulti ", nmulti_currval, " result ", $result
+  else:
+    result = ident($iter_pos & $(imulti.intVal))
+    echo "blind result ", $result
+
+
+template yield_sample_array(res, offset, typ, value: typed): untyped =
+  when type(res) is AmDualSampleArray|AmSampleArray:
+    res.mtab[offset] = cast[ptr typ](value)
+  elif type(res) is AmDualTypeSampleArray:
+    res.mtab[offset] = cast[pointer](value)
+  #elif type(res) is AmSampleArrayPtr:
+  #  ptrset(res.itab, offset, cast[ptr typ](value))
 
 
 # Using indexNamed on iter_pos
@@ -311,14 +407,15 @@ template multiStridedIterationYield*(
 
   when imulti < nmulti:
     when strider == IterKind.Values:
-      let ipos_z = makeIterPosIdent("iter_pos", imulti) # FIXME: Should use iter_pos parameter.
-      res[imulti + ioff] = cast[ptr type(data[0])](data[iter_offsets[imulti] + ipos_z].addr)
+      yield_sample_array(res, imulti + ioff, type(data[0]),
+        data[iter_offsets[imulti] + makeIterPosIdent(iter_pos, imulti, nmulti)].addr)
+
       when imulti < nmulti - 1:
         when dynn is SomeInteger:
-          if dynn <= imulti:
-            break label_block
+          if dynn <= imulti + 1: break label_block
+        
         multiStridedIterationYield(label_block,
-          iter_pos, strider, data, iter_offsets, i, nmulti, dynn, res, imulti + 1)
+          iter_pos, strider, data, iter_offsets, i, nmulti, dynn, res, imulti + 1, ioff)
 
     # These modes not yet supported
     #elif strider == IterKind.Iter_Values: yield (i, data[iter_pos])
@@ -344,14 +441,15 @@ template multiStridedIterationYieldContiguous*(
 
   when imulti < nmulti:
     when strider == IterKind.Values:
-      let ipos_z = iter_pos
-      res[imulti + ioff] = cast[ptr type(data[0])](data[iter_offsets[imulti] + ipos_z].addr)
+      yield_sample_array(res, imulti + ioff, type(data[0]),
+        data[iter_offsets[imulti] + (iter_pos)].addr)
+
       when imulti < nmulti - 1:
         when dynn is SomeInteger:
-          if dynn <= imulti:
-            break label_block
+          if dynn <= imulti + 1: break label_block
+        
         multiStridedIterationYieldContiguous(label_block,
-          iter_pos, strider, data, iter_offsets, i, nmulti, dynn, res, imulti + 1)
+          iter_pos, strider, data, iter_offsets, i, nmulti, dynn, res, imulti + 1, ioff)
 
     # These modes not yet supported
     #elif strider == IterKind.Iter_Values: yield (i, data[iter_pos])
@@ -399,59 +497,89 @@ template declMultiStridedIterationData(srcdata, res, areContiguous, itsiz, nadv,
 
   use_mem_hints()
   let srcdata {.restrict.} = t.dataArray
-  var res {.restrict.}: array[MAX_IMAGE_CHANNELS, ptr type(t.data[0])]
+  var res {.restrict.}: AmSampleArray[type(t.data[0])]
 
 
-template declDualMultiStridedIterationData(lhsdata, rhsdata, res, areContiguous, itsiz, nadv, tlhs, trhs, iter_size, adv: untyped): untyped =
+template typedSame(x, y: typed): bool =
+  when type(x) is type(y) and type(y) is type(x):
+    true
+  else:
+    false
+
+
+template declDualMultiStridedIterationData(lhsdata, rhsdata,
+    res, areContiguous, itsiz, nadv_lhs, nadv_rhs, tlhs, trhs,
+    iter_size, adv_lhs, adv_rhs: untyped): untyped =
   ## Dual multi strided iteration data
   let
-    areContiguous = t.is_C_Contiguous
+    areContiguous = tlhs.is_C_Contiguous and trhs.is_C_Contiguous
     itsiz = iter_size
-    nadv = adv
+    nadv_lhs = adv_lhs
+    nadv_rhs = adv_rhs
 
   use_mem_hints()
   # Declare data for left and right hand sides.
   let lhsdata {.restrict.} = tlhs.dataArray
   let rhsdata {.restrict.} = trhs.dataArray
   # The result vector is twice the length.
-  var res {.restrict.}: array[MAX_IMAGE_CHANNELS*2, pointer]
+  when typedSame(tlhs.data[0], trhs.data[0]):
+    var res {.restrict.}: AmDualSampleArray[type(tlhs.data[0])]
+  else:
+    var res {.restrict.}: AmDualTypeSampleArray[type(tlhs.data[0]), type(trhs.data[0])]
 
 
 
-template multiStridedIteration(strider, t, iter_offsets, iter_size, adv: typed, nmulti: typed): untyped =
-  ## Multi strided iteration
+template multiStridedIteration(
+    strider, t, iter_offsets,
+    iter_size, adv: typed, nmulti: typed): untyped =
+
+  ## Multi strided iteration (over one image)
   when compileOption("boundChecks"):
     assert 0 <= adv,
       "LERoSI/backend/am/am_accessors: Bad adv step in multiStridedIteration"
 
   const nmultiIsDynamic = not compiles((const nmultiConst = nmulti))
   when nmultiIsDynamic:
+    ## Channel count is dynamic
     var dynn: int = nmulti
     const nmultiVal = MAX_IMAGE_CHANNELS
   else:
+    ## Channel count is static
     var dynn {.used.} : pointer = nil
     const nmultiVal = nmulti
 
+  ## Initialize iteration data
   declMultiStridedIterationData(source, resultVector, areAllContiguous, itsiz, nadv, t, iter_size, adv)
 
-  # Optimize for loops in contiguous cases
   if areAllContiguous:
+    ## Optimize for loops in contiguous cases
     for j in countup(0, ((itsiz-1)*nadv), step=nadv):
       block MULTI_STRIDED_CONTIGUOUS_SELECT:
+        ## Fill result pointer vector
         multiStridedIterationYieldContiguous(MULTI_STRIDED_CONTIGUOUS_SELECT,
           j, strider, source,
           iter_offsets, j, nmultiVal, dynn, resultVector)
-      # The above only sets up a yield by writing to res.
+
+      ## Yield the result pointer vector
       yield resultVector
 
   else:
+    ## Declare iteration variables
     declMultiStridedIterationVars(coord, backstrides, iter_pos, nmulti)
+
+    ## Initialize iteration variables
     initMultiStridedIteration(coord, backstrides, iter_pos, t, iter_offsets, itsiz, nmulti)
+
     for j in countup(0, ((itsiz-1)*nadv), step=nadv):
       block MULTI_STRIDED_INDEX_SELECT:
+        ## Fill result pointer vector
         multiStridedIterationYield(MULTI_STRIDED_INDEX_SELECT,
           iter_pos, strider, source, iter_offsets, j, nmultiVal, dynn, resultVector)
+
+      ## Yield the result pointer vector
       yield resultVector
+
+      ## Advance the iteration position
       advanceMultiStridedIteration(
         "coord", "backstrides", "iter_pos", t, iter_offsets, itsiz, nmulti, count = nadv)
 
@@ -462,48 +590,113 @@ template dualMultiStridedIteration(strider, tlhs, trhs,
     adv_lhs, adv_rhs: typed,
     nmulti_lhs, nmulti_rhs: typed): untyped =
   ## Dual multi strided iteration
+  
   when compileOption("boundChecks"):
-    assert 0 <= adv,
-      "LERoSI/backend/am/am_accessors: Bad adv step in multiStridedIteration"
-  declDualMultiStridedIterationData(lhsData, rhsData, resultVector, areAllContiguous, itsiz, nadv, tlhs, trhs, iter_size, adv)
+    assert 0 <= adv_lhs,
+      "LERoSI/backend/am/am_accessors: Bad adv_lhs step in multiStridedIteration"
+    assert 0 <= adv_rhs,
+      "LERoSI/backend/am/am_accessors: Bad adv_rhs step in multiStridedIteration"
 
-  # Optimize for loops in contiguous cases
+  const nmulti_lhsIsDynamic = not compiles((const nmultiConst = nmulti_lhs))
+  when nmulti_lhsIsDynamic:
+    ## Left hand channel count is dynamic
+    var dynn_lhs: int = nmulti_lhs
+    const nmultiVal_lhs = MAX_IMAGE_CHANNELS
+  else:
+    ## Left hand channel count is static
+    var dynn_lhs {.used.} : pointer = nil
+    const nmultiVal_lhs = nmulti_lhs
+
+  const nmulti_rhsIsDynamic = not compiles((const nmultiConst = nmulti_rhs))
+  when nmulti_rhsIsDynamic:
+    ## Right hand channel count is dynamic
+    var dynn_rhs: int = nmulti_rhs
+    const nmultiVal_rhs = MAX_IMAGE_CHANNELS
+  else:
+    ## Right hand channel count is static
+    var dynn_rhs {.used.} : pointer = nil
+    const nmultiVal_rhs = nmulti_rhs
+
+  ## Don't iterate past the end of ither.
+  let iter_size = min(iter_size_lhs, iter_size_rhs)
+  
+  ## Initialize iteration data
+  declDualMultiStridedIterationData(lhsData, rhsData, resultVector,
+    areAllContiguous, itsiz, nadv_lhs, nadv_rhs,
+    tlhs, trhs, iter_size, adv_lhs, adv_rhs)
+
   if areAllContiguous:
-    for j in countup(0, ((itsiz-1)*nadv), step=nadv):
+    ## Optimize for loops in contiguous cases
+    for j in countup(0, itsiz-1, step=1):
+      let
+        j_lhs = j * nadv_lhs
+        j_rhs = j * nadv_rhs
       block MULTI_STRIDED_CONTIGUOUS_SELECT_LEFT:
-        multiStridedIterationYieldContiguous(MULTI_STRIDED_CONTIGUOUS_SELECT_LEFT,
-          j, strider, lhsData, iter_offsets_lhs, j, nmulti_lhs, resultVector)
+        ## Fill result pointer vector left
+        multiStridedIterationYieldContiguous(
+          MULTI_STRIDED_CONTIGUOUS_SELECT_LEFT,
+          j_lhs, strider, lhsData, iter_offsets_lhs, j_lhs,
+          nmultiVal_lhs, dynn_lhs, resultVector)
+
       block MULTI_STRIDED_CONTIGUOUS_SELECT_RIGHT:
+        ## Fill result pointer vector right
         multiStridedIterationYieldContiguousOffset(
-          MAX_IMAGE_CHANNELS, MULTI_STRIDED_CONTIGUOUS_SELECT_RIGHT,
-          j, strider, rhsData, iter_offsets_rhs, j, nmulti_rhs, resultVector)
-      # The above only sets up a yield by writing to res.
+          MAX_IMAGE_CHANNELS+1, MULTI_STRIDED_CONTIGUOUS_SELECT_RIGHT,
+          j_rhs, strider, rhsData, iter_offsets_rhs, j_rhs,
+          nmultiVal_rhs, dynn_rhs, resultVector)
+
+      ## Yield the result pointer vector
       yield resultVector
 
   else:
+    ## Fall back on table driven iteration.
+
+    ## Declare left hand side iteration variables
     declMultiStridedIterationVars(
       coord_lhs, backstrides_lhs, iter_pos_lhs, nmulti_lhs)
+    ## Declare right hand side iteration variables
     declMultiStridedIterationVars(
       coord_rhs, backstrides_rhs, iter_pos_rhs, nmulti_rhs)
 
+    ## Initialize left hand side iteration variables
     initMultiStridedIteration(
       coord_lhs, backstrides_lhs, iter_pos_lhs,
       tlhs, iter_offsets_lhs, itsiz, nmulti_lhs)
+    ## Initialize right hand side iteration variables
     initMultiStridedIteration(
       coord_rhs, backstrides_rhs, iter_pos_rhs,
       tlhs, iter_offsets_rhs, itsiz, nmulti_rhs)
 
-    for j in countup(0, ((itsiz-1)*nadv), step=nadv):
-      multiStridedIterationYield(MULTI_STRIDED_INDEX_SELECT_LEFT,
-        iter_pos_lhs, strider, lhsData, iter_offsets, j, nmulti, resultVector)
-      multiStridedIterationYieldOffset(
-        MAX_IMAGE_CHANNELS, MULTI_STRIDED_INDEX_SELECT_RIGHT,
-        iter_pos_rhs, strider, rhsData, iter_offsets, j, nmulti, resultVector)
+    for j in countup(0, itsiz-1, step=1):
+      let
+        j_lhs = j * nadv_lhs
+        j_rhs = j * nadv_rhs
+
+      block MULTI_STRIDED_INDEX_SELECT_LEFT:
+        ## Fill result pointer vector left
+        multiStridedIterationYield(MULTI_STRIDED_INDEX_SELECT_LEFT,
+          iter_pos_lhs, strider, lhsData, iter_offsets_lhs, j_lhs,
+          nmultiVal_lhs, dynn_lhs, resultVector)
+
+      block MULTI_STRIDED_INDEX_SELECT_RIGHT:
+        ## Fill result pointer vector right
+        multiStridedIterationYieldOffset(
+          MAX_IMAGE_CHANNELS+1, MULTI_STRIDED_INDEX_SELECT_RIGHT,
+          iter_pos_rhs, strider, rhsData, iter_offsets_rhs, j_rhs,
+          nmultiVal_rhs, dynn_rhs, resultVector)
+
+      ## Yield the result pointer vector
       yield resultVector
+
+      ## Advance the left hand iteration position
       advanceMultiStridedIteration(
-        "coord_lhs", "backstrides_lhs", "iter_pos_lhs", t, iter_offsets, itsiz, nmulti, count = nadv)
+        "coord_lhs", "backstrides_lhs", "iter_pos_lhs", tlhs,
+        iter_offsets_lhs, itsiz, nmulti_lhs, count = nadv_lhs)
+
+      ## Advance the right hand iteration position
       advanceMultiStridedIteration(
-        "coord", "backstrides", "iter_pos", t, iter_offsets, itsiz, nmulti, count = nadv)
+        "coord_rhs", "backstrides_rhs", "iter_pos_rhs", trhs,
+        iter_offsets_rhs, itsiz, nmulti_rhs, count = nadv_rhs)
 
 
 template channelStridedIteration*(s1, order, i: typed): untyped =
@@ -527,6 +720,7 @@ template channelStridedIteration*(s1, order, i: typed): untyped =
 template declMultiChannelStridedIterationData(
     msrc, t, totalsize, offsets, adv: untyped;
     s, order: typed): untyped =
+
   ## Multi channel strided iteration data
   var
     msrc = s.msource
@@ -539,6 +733,8 @@ template declMultiChannelStridedIterationData(
 
 template initMultiChannelStridedIterationData(
     order, offsets, ind, t, adv, nmulti: typed): untyped =
+
+  ## Multi channel strided iteration initialize
   case order
   of DataPlanar:
     for i in 0..<nmulti:
@@ -551,30 +747,35 @@ template initMultiChannelStridedIterationData(
 
 
 template multiChannelStridedIteration*(s1, order, ind: typed, nmulti: typed): untyped =
+  ## Multi channel strided iteration
+
+  ## Multi channel strided iteration setup
   declMultiChannelStridedIterationData(msrc, t, totalsize, offsets, adv, s1, order)
   initMultiChannelStridedIterationData(order, offsets, ind, t, adv, nmulti)
 
+  ## Multi channel strided iteration invocation
   multiStridedIteration(
     IterKind.Values, t,
     offsets, totalsize,
     adv = adv, nmulti) # Added new advance parameter
 
+
 template dualMultiChannelStridedIteration*(
     s1, s2, order1, order2,
     ind1, ind2, nmulti1, nmulti2: typed): untyped =
-
+  ## Dual multi channel strided iteration
+  
+  ## Dual multi channel strided iteration left hand side declarations
   declMultiChannelStridedIterationData(msrc1, t1, totalsize1, offsets1, adv1, s1, order1)
+  ## Dual multi channel strided iteration right hand side declarations
   declMultiChannelStridedIterationData(msrc2, t2, totalsize2, offsets2, adv2, s2, order2)
 
+  ## Dual multi channel strided iteration left hand side initialization
   initMultiChannelStridedIterationData(order1, offsets1, ind1, t1, adv1, nmulti1)
+  ## Dual multi channel strided iteration right hand side initialization
   initMultiChannelStridedIterationData(order2, offsets2, ind2, t2, adv2, nmulti2)
 
-#strider, tlhs, trhs,
-#    iter_offsets_lhs, iter_offsets_rhs,
-#    iter_size_lhs, iter_size_rhs,
-#    adv_lhs, adv_rhs: typed,
-#    nmulti_lhs, nmulti_rhs: typed
-
+  ## Dual multi channel strided iteration invocation
   dualMultiStridedIteration(
     IterKind.Values, t1, t2,
     offsets1, offsets2,
@@ -595,7 +796,6 @@ iterator sampleND*[T](s1: AmDirectNDSampler[T]): T =
     0, s1.msource[].backend_data.size, adv = 1)
 
 
-
 iterator msampleNDchannel*[T](s1: AmDirectNDSampler[T], i: int): var T =
   channelStridedIteration(s1, s1.order, i)
 
@@ -604,147 +804,105 @@ iterator sampleNDchannel*[T](s1: AmDirectNDSampler[T], i: int): T =
   channelStridedIteration(s1, s1.order, i)
 
 
-iterator msampleNDchannels*[T](
-    s1: AmDirectNDSampler[T], i: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i], 1)
-
-
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T], i: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i], 1)
-
-
-# Need more work!
-iterator sampleNDchannels*[T, U](
-    s1: AmDirectNDSampler[T], s2: AmDirectNDSampler[U],
-    i1, i2: int): array[MAX_IMAGE_CHANNELS*2, pointer] =
-  dualMultiChannelStridedIteration(s1, s2, s1.order, s2.order, [i1], [i2], 1, 1)
-
-
-iterator msampleNDchannels*[T](s1: var AmDirectNDSampler[T],
-    i, j: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i, j], 2)
-
-
-iterator sampleNDchannels*[T](s1: AmDirectNDSampler[T],
-    i, j: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i, j], 2)
-
-
-iterator msampleNDchannels*[T](s1: var AmDirectNDSampler[T],
-    i, j, k: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i, j, k], 3)
-
-
-iterator sampleNDchannels*[T](s1: AmDirectNDSampler[T],
-    i, j, k: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i, j, k], 3)
-
-
-iterator msampleNDchannels*[T](s1: var AmDirectNDSampler[T],
-    i1, i2, i3, i4: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i1, i2, i3, i4], 4)
-
-
-iterator sampleNDchannels*[T](s1: AmDirectNDSampler[T],
-    i1, i2, i3, i4: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i1, i2, i3, i4], 4)
-
-
-iterator msampleNDchannels*[T](
-    s1: var AmDirectNDSampler[T],
-    i1, i2, i3, i4, i5: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i1, i2, i3, i4, i5], 5)
-
-
-iterator sampleNDchannels*[T](
+iterator sampleNDchannels*[T; N](
     s1: AmDirectNDSampler[T],
-    i1, i2, i3, i4, i5: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i1, i2, i3, i4, i5], 5)
-
-
-iterator msampleNDchannels*[T](
-    s1: var AmDirectNDSampler[T],
-    i1, i2, i3, i4, i5, i6: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i1, i2, i3, i4, i5, i6], 6)
-
-
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T],
-    i1, i2, i3, i4, i5, i6: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i1, i2, i3, i4, i5, i6], 6)
-
-
-iterator msampleNDchannels*[T](
-    s1: var AmDirectNDSampler[T],
-    i1, i2, i3, i4, i5, i6, i7: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i1, i2, i3, i4, i5, i6, i7], 7)
-
-
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T],
-    i1, i2, i3, i4, i5, i6, i7: int): array[MAX_IMAGE_CHANNELS, ptr T] =
-  multiChannelStridedIteration(s1, s1.order, [i1, i2, i3, i4, i5, i6, i7], 7)
-
-
-iterator sampleNDchannels*[T](
-    s1: AmDirectNDSampler[T],
-    ind: openarray[int]): array[MAX_IMAGE_CHANNELS, ptr T] =
+    ind: array[N, int]): AmSampleArray[T] =
+  ## sampleNDchannels static variadic
   expandMacros:
-    let samplerChannelIndexLen = ind.len
-    multiChannelStridedIteration(s1, s1.order, ind, samplerChannelIndexLen)
+    ## sampleNDchannels static variadic body
+    when N is range:
+      const nmulti = high(N) - low(N) + 1
+    else:
+      const nmulti = int(N)
+    multiChannelStridedIteration(s1, s1.order, ind, nmulti)
 
 
-#iterator sampleNDchannels*[T](
-#    s1: AmDirectNDSampler[T],
-#    ind: array[1, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-#  for x in sampleNDchannels(s1, ind[0]):
-#    yield x
-#
-#
-#iterator sampleNDchannels*[T](
-#    s1: AmDirectNDSampler[T],
-#    ind: array[2, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-#  for x in sampleNDchannels(s1, ind[0], ind[1]):
-#    yield x
-#
-#
-#iterator sampleNDchannels*[T](
-#    s1: AmDirectNDSampler[T],
-#    ind: array[3, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-#  for x in sampleNDchannels(s1, ind[0], ind[1], ind[2]):
-#    yield x
-#
-#
-#iterator sampleNDchannels*[T](
-#    s1: AmDirectNDSampler[T],
-#    ind: array[4, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-#  for x in sampleNDchannels(s1, ind[0], ind[1], ind[2], ind[3]):
-#    yield x
-#
-#
-#iterator sampleNDchannels*[T](
-#    s1: AmDirectNDSampler[T],
-#    ind: array[5, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-#  for x in sampleNDchannels(s1,
-#      ind[0], ind[1], ind[2], ind[3], ind[4]):
-#    yield x
-#
-#
-#iterator sampleNDchannels*[T](
-#    s1: AmDirectNDSampler[T],
-#    ind: array[6, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-#  for x in sampleNDchannels(s1,
-#      ind[0], ind[1], ind[2], ind[3], ind[4], ind[5]):
-#    yield x
-#
-#
-#iterator sampleNDchannels*[T](
-#    s1: AmDirectNDSampler[T],
-#    ind: array[7, int]): array[MAX_IMAGE_CHANNELS, ptr T] =
-#  for x in sampleNDchannels(s1,
-#      ind[0], ind[1], ind[2], ind[3], ind[4], ind[5], ind[6]):
-#    yield x
+iterator sampleNDchannels*[T; N](
+    s1: AmDirectNDSampler[T],
+    ind: array[N, int]{`const`}): AmSampleArray[T] =
+  ## sampleNDchannels static variadic
+  expandMacros:
+    ## sampleNDchannels static variadic body
+    when N is range:
+      const nmulti = high(N) - low(N) + 1
+    else:
+      const nmulti = int(N)
+    multiChannelStridedIteration(s1, s1.order, ind, nmulti)
+
+
+iterator sampleNDchannels*[T; S: not array](
+    s1: AmDirectNDSampler[T],
+    ind: S): AmSampleArray[T] =
+  ## sampleNDchannels variadic
+  expandMacros:
+    ## sampleNDchannels variadic body
+    multiChannelStridedIteration(s1, s1.order, ind, ind.len)
+
+
+iterator sampleDualNDchannels*[T; U; IA: not array; IB: not array](
+    s1, s2: AmDirectNDSampler[T];
+    ind1: IA,
+    ind2: IB): AmDualSampleArray[T] =
+  ## sampleDualNDchannels variadic
+  expandMacros:
+    ## sampleDualNDchannels variadic body
+    dualMultiChannelStridedIteration(
+      s1, s2, s1.order, s2.order,
+      ind1, ind2, ind1.len, ind2.len)
+
+
+iterator sampleDualNDchannels*[T; U; IA: not array; M](
+    s1, s2: AmDirectNDSampler[T];
+    ind1: IA,
+    ind2: array[M, int]): AmDualSampleArray[T] =
+  ## sampleDualNDchannels variadic static right
+  expandMacros:
+    when M is range:
+      const nmulti = high(M) - low(M) + 1
+    else:
+      const nmulti = int(M)
+    ## sampleDualNDchannels variadic body static right
+    dualMultiChannelStridedIteration(
+      s1, s2, s1.order, s2.order,
+      ind1, ind2, ind1.len, nmulti)
+
+
+iterator sampleDualNDchannels*[T; U; N; IB: not array](
+    s1, s2: AmDirectNDSampler[T];
+    ind1: array[N, int],
+    ind2: IB): AmDualSampleArray[T] =
+  ## sampleDualNDchannels variadic static left
+  expandMacros:
+    when N is range:
+      const nmulti = high(M) - low(M) + 1
+    else:
+      const nmulti = int(M)
+    ## sampleDualNDchannels variadic body static left
+    dualMultiChannelStridedIteration(
+      s1, s2, s1.order, s2.order,
+      ind1, ind2, nmulti, ind2.len)
+
+
+iterator sampleDualNDchannels*[T; U; N; M](
+    s1: AmDirectNDSampler[T], s2: AmDirectNDSampler[U];
+    ind1: array[N, int],
+    ind2: array[M, int]): AmDualSampleArray[T] =
+  ## sampleDualNDchannels static variadic
+  expandMacros:
+    ## sampleDualNDchannels static variadic body
+    when N is range:
+      const nmulti1 = high(N) - low(N) + 1
+    else:
+      const nmulti1 = int(N)
+    when M is range:
+      const nmulti2 = high(M) - low(M) + 1
+    else:
+      const nmulti2 = int(M)
+    static:
+      echo "dual nmulti ", nmulti1, " ", nmulti2
+    dualMultiChannelStridedIteration(
+      s1, s2, s1.order, s2.order,
+      ind1, ind2, nmulti1, nmulti2)
 
 
 template stridedCoordsIteration*(t, iter_offset, iter_size: typed): untyped =
