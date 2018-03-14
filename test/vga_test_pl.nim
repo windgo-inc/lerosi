@@ -1,7 +1,7 @@
 import lerosi, times, ./benchtime
 
-var sourceFrame: BackendType("am", int)
-var destFrame: BackendType("am", int)
+var sourceFrame: BackendType("am", byte)
+var destFrame: BackendType("am", byte)
 
 discard sourceFrame.backend_data_noinit(3, 640, 480)
 discard destFrame.backend_data_noinit(3, 640, 480)
